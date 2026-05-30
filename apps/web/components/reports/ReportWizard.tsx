@@ -420,31 +420,42 @@ function Step2({
 
     const imgErr = errors.images?.message as string | undefined;
 
-    const handleUploadComplete = async (url: string) => {
+    const handleUploadComplete = (url: string) => {
         setUpErr(null);
+
+        // Update state and form value synchronously so validation passes instantly
+        const next = [
+            ...images,
+            {
+                preview: url,
+                cloudUrl: url,
+                name: `Photo #${images.length + 1}`,
+            },
+        ];
+        setImages(next);
+        setValue(
+            "images",
+            next.map((i) => i.cloudUrl),
+            { shouldValidate: true }
+        );
+
+        // Run AI analysis asynchronously in the background
         setBusy(true);
-        try {
-            const analysis = await analyzeMedicineImage(url).catch(unavailableAnalysis);
-            const next = [
-                ...images,
-                {
-                    preview: url,
-                    cloudUrl: url,
-                    name: `Photo #${images.length + 1}`,
-                    analysis,
-                },
-            ];
-            setImages(next);
-            setValue(
-                "images",
-                next.map((i) => i.cloudUrl),
-                { shouldValidate: true }
-            );
-        } catch (e) {
-            setUpErr(e instanceof Error ? e.message : "Image analysis failed.");
-        } finally {
-            setBusy(false);
-        }
+        void analyzeMedicineImage(url)
+            .then((analysis) => {
+                setImages((currentImages) =>
+                    currentImages.map((img) => (img.cloudUrl === url ? { ...img, analysis } : img))
+                );
+            })
+            .catch((err) => {
+                const analysis = unavailableAnalysis(err);
+                setImages((currentImages) =>
+                    currentImages.map((img) => (img.cloudUrl === url ? { ...img, analysis } : img))
+                );
+            })
+            .finally(() => {
+                setBusy(false);
+            });
     };
 
     const remove = (idx: number) => {
