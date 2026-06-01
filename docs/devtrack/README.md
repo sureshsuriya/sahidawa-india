@@ -75,3 +75,4 @@
 | [#898](https://github.com/RatLoopz/sahidawa-india/pull/898)   | 2026-06-01 | Frontend | 8     | @Tanish-Solanki        | [View Doc](devtrack/2026-06/PR-898-fix-improve-language-switcher-accessibility.md)                                                                                            |
 | [#1051](https://github.com/RatLoopz/sahidawa-india/pull/1051) | 2026-06-01 | Backend | 9 | @AnushKamble | [View Doc](devtrack/2026-06/PR-1051-fix-add-authentication-and-origin-validation-to-me.md) |
 | [#1023](https://github.com/RatLoopz/sahidawa-india/pull/1023) | 2026-06-01 | Frontend | 10 | @PremSahith | [View Doc](devtrack/2026-06/PR-1023-redesign-explore-features-section-and-fix-ci-test-.md) |
+| [#1057](https://github.com/RatLoopz/sahidawa-india/pull/1057) | 2026-06-01 | Frontend | 11 | @Adi-Marathe | [View Doc](devtrack/2026-06/PR-1057-fix-redesign-footer-with-glassmorphism-reduce-spac.md) |
