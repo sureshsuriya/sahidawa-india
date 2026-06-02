@@ -54,9 +54,9 @@ export async function analyzeMedicineImage(
 
     const res = await fetchWithRetry(`${API_BASE}/api/ml/analyze`, {
         method: "POST",
-        headers: { 
+        headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
+            "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({ imageUrl }),
         timeout: 10000,
@@ -202,13 +202,51 @@ export async function verifyMedicine(
     batchNumber: string,
     signal?: AbortSignal
 ): Promise<VerifyResult> {
-    const csrfToken = await getCsrfToken();
+    // 1. Try ML Service First
+    const mlUrl = process.env.NEXT_PUBLIC_ML_URL;
+    if (mlUrl) {
+        try {
+            const mlRes = await fetchWithRetry(`${mlUrl.replace(/\/+$/, "")}/verify/batch`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ batch_number: batchNumber }),
+                timeout: 8000,
+                signal,
+            });
 
+            if (mlRes.ok) {
+                const mlData = await mlRes.json();
+
+                if (mlData.status === "not_found") {
+                    return { verified: false, message: "Medicine not found" };
+                }
+
+                // Map ML response to VerifyResult structure
+                return {
+                    verified: true,
+                    medicine: {
+                        brand_name: mlData.brand_name || "",
+                        generic_name: mlData.generic_name || "",
+                        manufacturer: mlData.manufacturer || "",
+                        batch_number: batchNumber,
+                        expiry_date: mlData.expiry_date || null,
+                        cdsco_approval_status: mlData.cdsco_approval_status || "",
+                        is_counterfeit_alert: mlData.is_counterfeit_alert || false,
+                    },
+                };
+            }
+        } catch (error) {
+            console.warn("ML service verification failed, falling back to Node API", error);
+        }
+    }
+
+    // 2. Fallback to Node API
+    const csrfToken = await getCsrfToken();
     const res = await fetchWithRetry(`${API_BASE}/api/verify`, {
         method: "POST",
-        headers: { 
+        headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
+            "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({ batchNumber }),
         timeout: 10000,
@@ -233,9 +271,9 @@ export async function fuzzyMatchBrand(query: string, signal?: AbortSignal): Prom
 
     const res = await fetchWithRetry(`${API_BASE}/api/v1/scan/match`, {
         method: "POST",
-        headers: { 
+        headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
+            "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({ query }),
         timeout: 8000,
@@ -258,9 +296,9 @@ export async function verifyMedicineByBrand(
 
     const res = await fetchWithRetry(`${API_BASE}/api/v1/scan/verify-brand`, {
         method: "POST",
-        headers: { 
+        headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
+            "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({ brandName }),
         timeout: 10000,
@@ -298,7 +336,7 @@ export async function checkLasaConflicts(
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
+            "x-csrf-token": csrfToken,
         },
         body: JSON.stringify({ medicineName }),
         timeout: 8000,

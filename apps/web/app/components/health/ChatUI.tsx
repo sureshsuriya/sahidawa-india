@@ -270,6 +270,9 @@ export default function ChatUI() {
             {/* Messages */}
             <main
                 ref={messagesContainerRef}
+                role="log"
+                aria-live="polite"
+                aria-label="Chat conversation"
                 className="absolute inset-0 z-0 overflow-y-auto px-4 pt-28 pb-36"
             >
                 <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -316,6 +319,8 @@ export default function ChatUI() {
                     <div className="flex items-center gap-3">
                         <button
                             onClick={toggleVoice}
+                            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+                            aria-pressed={isListening}
                             className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition-all ${
                                 isListening
                                     ? "bg-red-500 text-white shadow-md shadow-red-500/20"
@@ -324,8 +329,14 @@ export default function ChatUI() {
                         >
                             {isListening ? <IconStop /> : <IconMic size={20} />}
                         </button>
+
+                        <label htmlFor="chat-input" className="sr-only">
+                            Type your health question
+                        </label>
                         <textarea
+                            id="chat-input"
                             ref={inputRef}
+                            aria-label="Type your health question"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -338,6 +349,7 @@ export default function ChatUI() {
                         <button
                             onClick={() => sendMessage(input)}
                             disabled={!input.trim() || isTyping}
+                            aria-label="Send message"
                             className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition-all ${
                                 input.trim() && !isTyping
                                     ? "bg-linear-to-r from-emerald-500 to-teal-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:from-emerald-600 hover:to-teal-600 active:scale-95"
