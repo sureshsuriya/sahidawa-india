@@ -146,3 +146,4 @@
 | [#1115](https://github.com/RatLoopz/sahidawa-india/pull/1115) | 2026-06-02 | Frontend | 10 | @Aryan-Agarwal-creator | [View Doc](devtrack/2026-06/PR-1115-fix-improve-accessibility.md) |
 | [#1114](https://github.com/RatLoopz/sahidawa-india/pull/1114) | 2026-06-02 | Backend | 16 | @anshul23102 | [View Doc](devtrack/2026-06/PR-1114-fix-lasa-add-lasalimiter-and-cap-medicinename-leng.md) / [ADR](devtrack/adr/ADR-020-fix-lasa-add-lasalimiter-and-cap-medicinename-leng.md) |
 | [#1106](https://github.com/RatLoopz/sahidawa-india/pull/1106) | 2026-06-02 | Frontend | 8 | @saurabhhhcodes | [View Doc](devtrack/2026-06/PR-1106-fix-web-stabilize-sign-in-navigation.md) |
+| [#1108](https://github.com/RatLoopz/sahidawa-india/pull/1108) | 2026-06-02 | ML/AI | 24 | @Kinara2020 | [View Doc](devtrack/2026-06/PR-1108-feat-ml-add-cdsco-batch-recall-and-expiry-verifier.md) / [ADR](devtrack/adr/ADR-020-feat-ml-add-cdsco-batch-recall-and-expiry-verifier.md) |
