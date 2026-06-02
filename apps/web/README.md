@@ -168,7 +168,7 @@ apps/web/
 
 ## i18n (Internationalization)
 
-11 supported locales:
+11 supported locales, including English:
 
 | Code | Language |
 | ---- | -------- |
