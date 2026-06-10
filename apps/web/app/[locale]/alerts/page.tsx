@@ -62,9 +62,9 @@ export default function FullAlertsLogPage() {
                 const data = await res.json();
                 setAllAlerts(data.data || []);
                 setTotalCount(data.totalCount || 0);
-            } catch (err) {
+            } catch {
                 // Log silently to avoid Next.js dev overlay popup
-                
+
                 setError(true);
             } finally {
                 setLoading(false);
