@@ -76,6 +76,10 @@ type PushAnalytics = {
     failureReasons: PushFailureReason[];
 };
 
+type AuditLogsResponse = {
+    logs?: any[];
+};
+
 const EMPTY_PUSH_ANALYTICS: PushAnalytics = {
     days: 30,
     since: "",
@@ -136,11 +140,12 @@ export default function AnalyticsDashboard() {
             const [medicinesRes, reportsRes, auditRes] = await Promise.all([
                 supabase.from("medicines").select("*").order("created_at", { ascending: false }),
                 supabase.from("reports").select("*").order("created_at", { ascending: false }),
-                supabase
-                    .from("audit_logs")
-                    .select("*")
-                    .order("created_at", { ascending: false })
-                    .limit(200),
+                fetch(`${ADMIN_API_BASE}/logs?page=1&limit=100`, {
+                    cache: "no-store",
+                    headers: {
+                        Authorization: `Bearer ${getToken()}`,
+                    },
+                }),
             ]);
 
             let pushData: PushAnalytics = { ...EMPTY_PUSH_ANALYTICS, days: filterDays };
@@ -172,11 +177,17 @@ export default function AnalyticsDashboard() {
 
             if (medicinesRes.error) console.error("Medicines fetch error:", medicinesRes.error);
             if (reportsRes.error) console.error("Reports fetch error:", reportsRes.error);
-            if (auditRes.error) console.error("Audit logs fetch error:", auditRes.error);
+
+            let allAudits: any[] = [];
+            if (!auditRes.ok) {
+                console.error("Audit logs fetch error:", auditRes.status);
+            } else {
+                const auditPayload = (await auditRes.json()) as AuditLogsResponse;
+                allAudits = Array.isArray(auditPayload.logs) ? auditPayload.logs : [];
+            }
 
             const allMedicines = medicinesRes.data ?? [];
             const allReports = reportsRes.data ?? [];
-            const allAudits = auditRes.data ?? [];
 
             setMedicines(allMedicines);
             setReports(allReports);
