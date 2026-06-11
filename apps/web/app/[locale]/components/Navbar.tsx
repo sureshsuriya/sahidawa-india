@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
     History,
+    HelpCircle,
     Home,
     User,
     MapPin,
@@ -13,6 +14,7 @@ import {
     X,
     LogIn,
     Camera,
+    Clock,
 } from "lucide-react";
 import { Link, usePathname } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
@@ -188,6 +190,12 @@ export default function Navbar() {
                             {tNav("pharmacy_map")}
                         </Link>
                         <Link
+                            href="/schedule"
+                            className={`${desktopNavLinkClassName} flex items-center gap-1`}
+                        >
+                            <Clock size={14} /> {tNav("schedule")}
+                        </Link>
+                        <Link
                             href="/reports/me"
                             className={`${desktopNavLinkClassName} flex items-center gap-1`}
                         >
@@ -247,22 +255,25 @@ export default function Navbar() {
                                             <Link
                                                 href="/how-it-works"
                                                 onClick={() => setIsMenuOpen(false)}
-                                                className="rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                                                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                             >
+                                                <HelpCircle size={14} />
                                                 {tNav("how_it_works")}
                                             </Link>
                                             <Link
                                                 href="/alerts"
                                                 onClick={() => setIsMenuOpen(false)}
-                                                className="rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                                                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                             >
+                                                <Bell size={14} />
                                                 {tNav("alerts")}
                                             </Link>
                                             <Link
                                                 href="/map"
                                                 onClick={() => setIsMenuOpen(false)}
-                                                className="rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                                                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                             >
+                                                <MapPin size={14} />
                                                 {tNav("pharmacy_map")}
                                             </Link>
                                             <Link
@@ -271,6 +282,13 @@ export default function Navbar() {
                                                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                             >
                                                 <History size={14} /> {tNav("my_reports")}
+                                            </Link>
+                                            <Link
+                                                href="/schedule"
+                                                onClick={() => setIsMenuOpen(false)}
+                                                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                                            >
+                                                <Clock size={14} /> {tNav("schedule")}
                                             </Link>
                                         </div>
 
@@ -288,15 +306,9 @@ export default function Navbar() {
 
                                         <div className="my-0.5 border-t border-slate-100 dark:border-slate-900" />
 
-                                        {/* Language Settings */}
-                                        <div className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                                        {/* Mobile Language & Theme Settings */}
+                                        <div className="flex items-center justify-center gap-4 px-2 py-2">
                                             <LanguageSwitcher />
-                                        </div>
-
-                                        <div className="border-t border-slate-100 dark:border-slate-900" />
-
-                                        {/* Dark Mode Theme Settings */}
-                                        <div className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-500 dark:text-slate-400">
                                             <ThemeToggle />
                                         </div>
                                     </div>
