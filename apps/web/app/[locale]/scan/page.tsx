@@ -35,6 +35,7 @@ import {
 } from "@/lib/api";
 import LasaConfirmation from "@/components/scanner/LasaConfirmation";
 import GenericAlternativeCard from "@/components/GenericAlternativeCard";
+import { MedicineSafetyPanel } from "@/components/medicine";
 import { fetchGenericAlternatives } from "@/lib/api/alternatives";
 import { BarcodeScanner } from "@/components/scanner/BarcodeScanner";
 import LazyImage from "@/components/LazyImage";
@@ -503,6 +504,7 @@ export default function ScanPage() {
     const [batchInput, setBatchInput] = useState("");
     const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
     const [verifyError, setVerifyError] = useState<string | null>(null);
+    const [showSafetyPanel, setShowSafetyPanel] = useState(true);
     const [ocrText, setOcrText] = useState<string | null>(null);
     const [ocrConfidence, setOcrConfidence] = useState<number | null>(null);
     const [parsedBrand, setParsedBrand] = useState<string>("");
@@ -1105,6 +1107,7 @@ export default function ScanPage() {
         setUploadedImage(null);
         setVerifyResult(null);
         setVerifyError(null);
+        setShowSafetyPanel(true);
         setBatchInput("");
         setOcrText(null);
         setOcrConfidence(null);
@@ -1123,6 +1126,7 @@ export default function ScanPage() {
         setShowResult(false);
         setVerifyResult(null);
         setVerifyError(null);
+        setShowSafetyPanel(true);
         setParsedBrand("");
         setParsedBatch("");
         setParsedExpiry("");
@@ -1230,7 +1234,7 @@ export default function ScanPage() {
                 {isScanning && <SkeletonLoader />}
 
                 {showResult && (
-                    <div className="animate-in fade-in zoom-in absolute inset-0 z-30 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm duration-300">
+                    <div className="animate-in fade-in zoom-in absolute inset-0 z-30 flex flex-col items-center justify-start overflow-y-auto bg-black/60 p-6 pt-20 pb-10 backdrop-blur-sm duration-300">
                         {showLasaConfirmation ? (
                             <LasaConfirmation
                                 scannedName={
@@ -1246,7 +1250,8 @@ export default function ScanPage() {
                             <>
                                 <button
                                     onClick={handleDismissResult}
-                                    className="absolute top-4 right-4 z-40 rounded-full bg-white/10 p-2 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+                                    aria-label="Close"
+                                    className="fixed top-4 right-4 z-40 rounded-full bg-white/10 p-2 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
                                 >
                                     <X size={24} />
                                 </button>
@@ -1280,6 +1285,16 @@ export default function ScanPage() {
                                                 onShare={handleShare}
                                                 shareLabel={tScan("share.button")}
                                             />
+                                            {showSafetyPanel && (
+                                                <MedicineSafetyPanel
+                                                    searchQuery={
+                                                        verifyResult.medicine.brand_name ||
+                                                        verifyResult.medicine.generic_name ||
+                                                        ""
+                                                    }
+                                                    onClose={() => setShowSafetyPanel(false)}
+                                                />
+                                            )}
                                             {loadingAlternative && (
                                                 <div className="flex w-full items-center justify-center rounded-[2.5rem] border border-(--color-border-muted) bg-slate-50 p-6 dark:bg-slate-900">
                                                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"></div>
@@ -1363,7 +1378,7 @@ export default function ScanPage() {
                 </p>
                 <Link
                     href="/history"
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-white/20 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-black focus:outline-none dark:border-white/20"
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-(--color-border-muted) bg-(--color-surface-muted) px-4 py-2 text-sm font-bold text-(--color-text-primary) shadow-sm transition-colors hover:bg-(--color-border-muted) focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-black focus:outline-none dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 >
                     <History size={18} />
                     View history
