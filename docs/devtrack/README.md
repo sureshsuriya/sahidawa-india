@@ -815,3 +815,5 @@
 | [#1498](https://github.com/RatLoopz/sahidawa-india/pull/1498) | 2026-06-09 | Frontend | 10 | @Mahesh-forcode | [View Doc](devtrack/2026-06/PR-1498-feat-map-offline-indexeddb-cache-with-24h-ttl-fall.md) |
 | [#1566](https://github.com/RatLoopz/sahidawa-india/pull/1566) | 2026-06-09 | Frontend | 6 | @vipul674 | [View Doc](devtrack/2026-06/PR-1566-fix-expand-extractmedicinename-skip-regex-with-com.md) |
 | [#1589](https://github.com/RatLoopz/sahidawa-india/pull/1589) | 2026-06-09 | Frontend | 17 | @shashank03-dev | [View Doc](devtrack/2026-06/PR-1589-feat-admin-gate-mutation-controls-by-role.md) / [ADR](devtrack/adr/ADR-030-feat-admin-gate-mutation-controls-by-role.md) |
+| [#1641](https://github.com/RatLoopz/sahidawa-india/pull/1641) | 2026-06-11 | Frontend | 8 | @Avinash-sdbegin | [View Doc](devtrack/2026-06/PR-1641-feat-compare-add-shareable-comparison-urls.md) |
+| [#1634](https://github.com/RatLoopz/sahidawa-india/pull/1634) | 2026-06-11 | Frontend | 13 | @hrx01-dev | [View Doc](devtrack/2026-06/PR-1634-feature-add-date-range-and-status-filters-to-csv-s.md) |
