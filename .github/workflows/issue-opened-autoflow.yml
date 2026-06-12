@@ -77,16 +77,14 @@ jobs:
                 .join('\n');
 
               const capMsg = [
-                '## ❌ Issue Automatically Closed — 3-Issue Cap Reached',
+                'Issue Closed.',
                 '',
-                'Hi @' + opener + '! 👋 You currently have **' + activeIssues.length + ' open issues assigned to you** without an active PR:',
+                `@${opener}, you currently have ${activeIssues.length} open issues assigned to you without an active PR:`,
                 '',
                 list,
                 '',
-                '> **You cannot raise more than 3 issues at once while your current assigned issues do not have PRs.**',
-                '',
-                'First complete your existing tasks, then move to raise new issues with the proper template. This keeps the queue fair for all contributors.',
-                'Thank you for your understanding! 💙'
+                'You cannot raise more than 3 issues at once while your current assignments lack PRs.',
+                'Please complete your existing tasks before raising new issues.'
               ].join('\n');
 
               await github.rest.issues.createComment({
@@ -157,19 +155,16 @@ jobs:
 
             // ── 6. Post the detailed onboarding comment ─────────────────────
             const lines = [
-              `Hi @${opener}! 👋 You've been automatically assigned to this issue.`,
+              `@${opener}, you have been assigned to this issue.`,
               '',
-              `**Difficulty:** ${levelEmoji} \`${level}\``,
-              `**Deadline:** ${maxDays} days from now (\`${deadlineStr}\`)`,
-              `**Warning sent after:** ${warnDays} days of inactivity`,
+              `- **Difficulty:** \`${level}\``,
+              `- **Deadline:** ${maxDays} days (\`${deadlineStr}\`)`,
+              `- **Warning sent after:** ${warnDays} days of inactivity`,
               '',
-              '> ⚠️ **Duplicate Check:** Before you start, please [search for similar issues/PRs](' + searchURL + '). If this is a duplicate, your PR may be closed without merging.',
+              `Note: Please [search for similar issues/PRs](${searchURL}) before coding to avoid duplicate work.`,
               '',
-              '**Activity Rules:**',
-              '- To keep your assignment active, please drop a progress comment or open a Draft PR linking to this issue.',
-              '- Do not open a PR without being assigned to the issue.',
-              '',
-              `Need help? Read our [Contributing Guide](https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md) or join [Discord](https://discord.gg/dvbDuJVwNa). Happy coding! 🚀`
+              'To keep your assignment active, post a progress comment or open a linked Draft PR.',
+              'Do not open a PR without being assigned to the issue.'
             ];
 
             await github.rest.issues.createComment({

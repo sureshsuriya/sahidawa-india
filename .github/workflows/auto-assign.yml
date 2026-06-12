@@ -71,12 +71,10 @@ jobs:
               await github.rest.issues.createComment({
                 owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
                 body: [
-                  '❌ **Assignment Request Denied**',
+                  'Assignment Request Denied.',
                   '',
-                  'Hi @' + commenter + ', we have updated our contribution guidelines to prevent spam.',
-                  'To be assigned to an issue, you **must provide a brief implementation approach**.',
-                  '',
-                  'Please reply with a clear description of how you plan to solve this issue (e.g., what files you will touch, logic changes) along with `/assign`.',
+                  `@${commenter}, to be assigned, you must provide a brief implementation approach.`,
+                  'Please reply with a description of how you plan to solve this issue (e.g., files to modify, logic changes) along with `/assign`.',
                   'Your current request was too short and has been ignored.'
                 ].join('\n')
               });
@@ -138,10 +136,10 @@ jobs:
                 await github.rest.issues.createComment({
                   owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
                   body: [
-                    '❌ **Assignment Request Denied**',
+                    'Assignment Request Denied.',
                     '',
-                    'Hi @' + commenter + ', currently **only the creator of this issue (@' + issueAuthor + ')** can claim it.',
-                    'If they claim it but become inactive, the bot will unassign them and this issue will become open for anyone to claim.'
+                    `@${commenter}, currently only the creator of this issue (@${issueAuthor}) can claim it.`,
+                    'If they become inactive, they will be unassigned and the issue will be opened for anyone to claim.'
                   ].join('\n')
                 });
                 try {
@@ -168,15 +166,13 @@ jobs:
               await github.rest.issues.createComment({
                 owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
                 body: [
-                  '\u274C **Request Denied**',
+                  'Request Denied.',
                   '',
-                  'Hi @' + commenter + ', to ensure a fair distribution of tasks during GSSoC/Hacktoberfest,',
-                  'contributors are limited to a maximum of **3 active assigned issues** at a time.',
+                  `@${commenter}, contributors are limited to a maximum of 3 active assigned issues.`,
+                  `You currently have ${activeIssues.length} active tasks:`,
+                  `- ${issueList}`,
                   '',
-                  'You are currently assigned to the following ' + activeIssues.length + ' active tasks:',
-                  '- ' + issueList,
-                  '',
-                  'Please complete your currently assigned tasks before requesting assignment for new ones! \uD83E\uDD1D'
+                  'Please complete your current tasks before requesting new assignments.'
                 ].join('\n')
               });
               return;
@@ -190,15 +186,10 @@ jobs:
               await github.rest.issues.createComment({
                 owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
                 body: [
-                  '## \u26a0\ufe0f Already Assigned',
+                  'Issue already assigned.',
                   '',
-                  'Hi @' + commenter + '! This issue is currently assigned to ' + takenBy + '.',
-                  '',
-                  'If they do not show activity within their deadline, the bot will automatically unassign',
-                  'them and the issue will be open again.',
-                  '',
-                  '\uD83D\uDC49 **To get notified when it becomes available:** click **Subscribe** (\uD83D\uDD14) on this issue',
-                  '\u2014 you can then drop `/assign` when it is free.'
+                  `@${commenter}, this issue is currently assigned to ${takenBy}.`,
+                  'If they do not show activity within their deadline, they will be unassigned and the issue will become available.'
                 ].join('\n')
               });
               return;
@@ -208,7 +199,7 @@ jobs:
             if (currentAssignees.includes(commenter)) {
               await github.rest.issues.createComment({
                 owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
-                body: '\u2139\ufe0f @' + commenter + ' \u2014 you are already assigned to this issue! Go ahead and start working. \uD83D\uDE80'
+                body: `@${commenter}, you are already assigned to this issue.`
               });
               return;
             }
@@ -280,17 +271,14 @@ jobs:
             await github.rest.issues.createComment({
               owner: repo.owner, repo: repo.repo, issue_number: issueNumber,
               body: [
-                `Hi @${commenter}! 🎉 You've been assigned to this issue.`,
+                `@${commenter}, you have been assigned to this issue.`,
                 '',
-                `**Difficulty:** ${levelEmoji} \`${level}\``,
-                `**Deadline:** ${maxDays} days from now (\`${deadlineStr}\`)`,
+                `- **Difficulty:** \`${level}\``,
+                `- **Deadline:** ${maxDays} days (\`${deadlineStr}\`)`,
                 '',
-                '**Activity Rules:**',
-                '- To keep your assignment active, please drop a progress comment or open a Draft PR linking to this issue.',
-                `- After ${maxDays} days of inactivity, you will be automatically unassigned.`,
+                'To keep your assignment active, post a progress update or open a linked Draft PR.',
+                `Inactivity for ${maxDays} days will result in automatic unassignment.`,
                 '',
-                '> ⚠️ **Note:** Please search for similar open/closed issues and PRs before coding to avoid duplicate work.',
-                '',
-                'Happy coding! 🚀'
+                'Note: Please search for similar open/closed issues and PRs before coding to avoid duplicate work.'
               ].join('\n')
             });
