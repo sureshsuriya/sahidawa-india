@@ -148,6 +148,10 @@ export default function AnalyticsDashboard() {
                 );
 
                 if (!pushAnalyticsRes.ok) {
+                    if (pushAnalyticsRes.status === 401 && typeof window !== "undefined") {
+                        window.location.href = "/admin/login";
+                        return;
+                    }
                     const message =
                         pushAnalyticsRes.status === 401 || pushAnalyticsRes.status === 403
                             ? "Push analytics require admin access."

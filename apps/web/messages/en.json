@@ -656,7 +656,7 @@
         "nav_schedule": "Medicine Schedule",
         "nav_profile": "My Profile"
     },
-    "howItWorks":{
+    "howItWorks": {
         "badge": "Safe Healthcare • AI Powered",
         "heroTitle": "How <highlight>SahiDawa</highlight> Works",
         "heroSubtitle": "Learn how SahiDawa helps users verify medicines, discover trusted pharmacies, receive official alerts, and stay protected from counterfeit drugs using AI-powered healthcare tools.",
@@ -757,6 +757,27 @@
             "pregnancyHeading": "Pregnancy"
         },
         "disclaimer": "This information is educational and does not replace professional medical advice."
+    },
+    "Interactions": {
+        "title": "Medicine Interaction Checker",
+        "subtitle": "Check potential harmful interactions between multiple medications",
+        "searchLabel": "Search Medicine",
+        "searchPlaceholder": "Enter brand name or generic name...",
+        "addButton": "Add",
+        "checkButton": "Check Interactions",
+        "myMedicines": "My Medicines List",
+        "noMedicines": "No medicines added to your check list yet.",
+        "clearAll": "Clear All",
+        "resultsHeading": "Interaction Report",
+        "noInteractions": "All clear! No interactions detected between selected medicines.",
+        "severityCritical": "Critical Alert",
+        "severitySerious": "Serious Warning",
+        "severityModerate": "Moderate Caution",
+        "severityMinor": "Minor Precaution",
+        "clinicalRecommendation": "Clinical Recommendation:",
+        "mechanism": "Mechanism:",
+        "source": "Source:",
+        "errorMessage": "Failed to complete interaction check. Please try again."
     },
     "ScanHistory": {
         "export_modal_title": "Export Scan History",
