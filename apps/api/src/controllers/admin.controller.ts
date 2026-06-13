@@ -88,9 +88,14 @@ export const updateReportStatus = async (
 
         const { status } = parsed.data;
 
+        const updateFields: Record<string, unknown> = { status };
+        if (status === "verified_fake") {
+            updateFields.is_escalated = false;
+        }
+
         const { data, error } = await supabase
             .from("counterfeit_reports")
-            .update({ status })
+            .update(updateFields)
             .eq("id", id)
             .select()
             .single();
@@ -114,22 +119,24 @@ export const updateReportStatus = async (
         );
 
         // --- DISTRICT ALERT LOGIC ---
+        // Only reports that passed validation (low risk score) contribute to
+        // district alerts. Artificially amplified or duplicate reports should
+        // not directly escalate public risk indicators.
         if (status === "verified_fake" && data.district) {
             const { count } = await supabase
                 .from("counterfeit_reports")
                 .select("*", { count: "exact", head: true })
                 .eq("district", data.district)
-                .eq("status", "verified_fake");
+                .eq("status", "verified_fake")
+                .eq("is_escalated", false);
 
-            if (count && count >= 3) {
-                const alertLevel = count >= 10 ? "high" : "medium";
+            // Increased threshold: require 5 validated reports (was 3) so that
+            // a small cluster of reports cannot trigger public panic signals.
+            // Also requires is_escalated = false — reports flagged by the
+            // validation service (burst/duplicate patterns) are excluded.
+            if (count && count >= 5) {
+                const alertLevel = count >= 15 ? "high" : "medium";
 
-                // Replace the previous check-then-insert pattern with a single upsert.
-                // The old pattern had a TOCTOU race window: two concurrent admin actions
-                // on the same district could both pass the existingAlert check and
-                // produce duplicate rows. The upsert with onConflict is atomic and
-                // eliminates the window. The conflict target must match a unique
-                // constraint on (district) in the district_alerts table.
                 await supabase.from("district_alerts").upsert(
                     {
                         district: data.district,

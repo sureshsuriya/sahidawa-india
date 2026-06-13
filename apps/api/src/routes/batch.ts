@@ -116,7 +116,11 @@ router.get("/:batchNumber", batchLimiter, async (req: Request, res: Response) =>
             .maybeSingle();
 
         if (batchError) {
-            logger.error({ message: "Batch lookup failed", error: batchError, route: "/api/verify/batch" });
+            logger.error({
+                message: "Batch lookup failed",
+                error: batchError,
+                route: "/api/verify/batch",
+            });
             res.status(500).json({ error: "Database lookup failed" });
             return;
         }
@@ -133,7 +137,11 @@ router.get("/:batchNumber", batchLimiter, async (req: Request, res: Response) =>
                 .maybeSingle();
 
             if (medicineError) {
-                logger.error({ message: "Medicine fallback lookup failed", error: medicineError, route: "/api/verify/batch" });
+                logger.error({
+                    message: "Medicine fallback lookup failed",
+                    error: medicineError,
+                    route: "/api/verify/batch",
+                });
                 res.status(500).json({ error: "Database lookup failed" });
                 return;
             }
@@ -259,7 +267,11 @@ router.get("/:batchNumber", batchLimiter, async (req: Request, res: Response) =>
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error({ message: "Batch traceability error", error: message, route: "/api/verify/batch" });
+        logger.error({
+            message: "Batch traceability error",
+            error: message,
+            route: "/api/verify/batch",
+        });
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -343,7 +355,11 @@ router.post("/report", batchLimiter, async (req: Request, res: Response) => {
         });
 
         if (error) {
-            logger.error({ message: "Failed to insert batch report", error, route: "/api/verify/batch/report" });
+            logger.error({
+                message: "Failed to insert batch report",
+                error,
+                route: "/api/verify/batch/report",
+            });
             res.status(500).json({ error: "Failed to submit report" });
             return;
         }
@@ -354,7 +370,11 @@ router.post("/report", batchLimiter, async (req: Request, res: Response) => {
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error({ message: "Batch report error", error: message, route: "/api/verify/batch/report" });
+        logger.error({
+            message: "Batch report error",
+            error: message,
+            route: "/api/verify/batch/report",
+        });
         res.status(500).json({ error: "Internal server error" });
     }
 });

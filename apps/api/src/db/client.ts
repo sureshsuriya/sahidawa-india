@@ -144,12 +144,14 @@ process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Log pool exhaustion warnings
-setInterval(() => {
-    const { active, queued, max } = pool.stats;
-    if (queued > 0) {
-        logger.warn(`DB pool pressure: ${active}/${max} active, ${queued} queued`);
-    }
-}, 5_000);
+if (process.env.NODE_ENV !== "test") {
+    setInterval(() => {
+        const { active, queued, max } = pool.stats;
+        if (queued > 0) {
+            logger.warn(`DB pool pressure: ${active}/${max} active, ${queued} queued`);
+        }
+    }, 5_000);
+}
 
 // Quick check on startup to see if Supabase is offline
 if (process.env.NODE_ENV !== "test") {

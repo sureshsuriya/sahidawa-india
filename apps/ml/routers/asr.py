@@ -729,7 +729,23 @@ class StreamingAsrSession:
         self.decoder = None
 
 
-@router.post("/transcribe")
+@router.post(
+        "/transcribe",
+        responses={
+            400: {
+                "description": "Invalid audio input, unsupported format, corrupted audio, or duration exceeds limit."
+            },
+            422: {
+                "description": "Unable to process the uploaded audio file."
+            },
+            503: {
+                "description": "Transcription service temporarily unavailable."
+            },
+            500: {
+                "description": "Internal server error during transcription."
+            },
+        },
+)
 async def transcribe_audio(file: UploadFile = File(...), language: str | None = Form(default=None)):
     """
     Accepts any supported audio file upload and returns transcribed text.

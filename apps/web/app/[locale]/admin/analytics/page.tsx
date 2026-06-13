@@ -32,6 +32,15 @@ const AnalyticsCharts = dynamic(() => import("@/components/admin/AnalyticsCharts
         </div>
     ),
 });
+const CacheStatsCard = dynamic(() => import("@/components/admin/CacheStatsCard"), {
+    ssr: false,
+    loading: () => (
+        <div className="animate-pulse rounded-xl border border-gray-100 bg-[#f9fafb] p-6">
+            <div className="mb-4 h-4 w-40 rounded bg-[#e5e7eb]" />
+            <div className="h-32 rounded bg-[#e5e7eb]" />
+        </div>
+    ),
+});
 
 type PushFailureReason = {
     reason: string;
@@ -534,6 +543,7 @@ export default function AnalyticsDashboard() {
                             monthlyTrend={monthlyTrend}
                             reportStatusDist={reportStatusDist}
                             topDistricts={topDistricts}
+                            cacheStatsCard={<CacheStatsCard />}
                         />
 
                         {/* Recent Activity */}

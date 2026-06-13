@@ -476,6 +476,7 @@
             "description": "Supabase URL या anon key उपलब्ध नहीं है। साइन इन करने से पहले आवश्यक environment variables जोड़ें।"
         },
         "googleButton": "Google के साथ जारी रखें",
+        "githubButton": "GitHub के साथ जारी रखें",
         "emailSeparator": "या ईमेल के साथ जारी रखें",
         "emailLabel": "ईमेल पता",
         "emailPlaceholder": "you@example.com",

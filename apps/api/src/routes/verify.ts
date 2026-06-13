@@ -7,6 +7,11 @@ import logger from "../utils/logger";
 import { lookupDrugByBatch } from "../services/drugLookup.service";
 import { escapeIlike } from "../utils/db";
 
+function getBatchStatus(recallStatus: string | null | undefined): "safe" | "recalled" | "unknown" {
+    if (!recallStatus || recallStatus === "none") return "safe";
+    if (recallStatus === "recalled") return "recalled";
+    return "unknown";
+}
 function maskClientIp(ip: string | undefined): string | null {
     if (!ip) return null;
 
@@ -243,6 +248,13 @@ router.post(
                 });
                 return;
             }
+            // Look up batch recall status from batches table
+            const { data: batchData } = await supabase
+                .from("batches")
+                .select("recall_status")
+                .eq("batch_number", batchNumber)
+                .maybeSingle();
+            const batch_status = getBatchStatus(batchData?.recall_status);
 
             const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
             const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -306,6 +318,7 @@ router.post(
 
             res.status(200).json({
                 verified: true,
+                batch_status,
                 medicine: {
                     brand_name: data.brand_name,
                     generic_name: data.generic_name,

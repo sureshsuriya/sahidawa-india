@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 
 # Adjust path so we can import services
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from services.alert_extractor import extract_alerts_from_text
+from services.alert_extractor import extract_alerts_from_text, extract_alerts_from_pdf_images
 
 logging.basicConfig(level=logging.INFO)
 
@@ -77,12 +77,12 @@ def process_alert_pdf(pdf_url: str):
         logging.error(f"Error parsing PDF with pdfplumber: {e}")
         return
         
-    if not text_content.strip():
-        logging.warning("No text extracted from PDF. It might be image-based.")
-        return
-        
-    logging.info("Extracted text from PDF, sending to LangChain for structural parsing...")
-    alerts = extract_alerts_from_text(text_content)
+    if not text_content.strip() or len(text_content.strip()) < 100:
+        logging.warning("No text or very short text extracted from PDF. It might be image-based. Triggering Gemini Multimodal OCR fallback...")
+        alerts = extract_alerts_from_pdf_images(pdf_response.content)
+    else:
+        logging.info("Extracted text from PDF, sending to LangChain for structural parsing...")
+        alerts = extract_alerts_from_text(text_content)
     
     if not alerts:
         logging.warning("No alerts extracted from the text by LangChain.")
