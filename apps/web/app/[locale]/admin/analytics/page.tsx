@@ -33,19 +33,6 @@ const AnalyticsCharts = dynamic(() => import("@/components/admin/AnalyticsCharts
     ),
 });
 
-const COLORS = {
-    emerald: "#10b981",
-    blue: "#3b82f6",
-    amber: "#f59e0b",
-    red: "#ef4444",
-    purple: "#8b5cf6",
-    teal: "#14b8a6",
-    slate: "#64748b",
-    rose: "#f43f5e",
-    cyan: "#06b6d4",
-    indigo: "#6366f1",
-};
-
 type PushFailureReason = {
     reason: string;
     httpStatus: number | null;
