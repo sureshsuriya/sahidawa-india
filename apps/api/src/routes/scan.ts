@@ -8,7 +8,7 @@ import { supabase } from "../db/client";
 import { getMlServiceUrl, MISSING_ML_SERVICE_URL_MESSAGE } from "../config/mlService";
 import { validateUploadSize } from "../middleware/uploadSizeValidator";
 import { uploadRateLimiter } from "../middleware/uploadRateLimit";
-
+import { escapePostgrest } from "../utils/db";
 import { escapeIlike } from "../utils/db";
 
 const router = Router();
@@ -507,7 +507,7 @@ router.post("/extract", uploadRateLimiter, validateUploadSize, (req: Request, re
                                 "composition, mrp, jan_aushadhi_price"
                         )
                         .or(
-                            `brand_name.ilike.%${escapeIlike(matchedName)}%,generic_name.ilike.%${escapeIlike(matchedName)}%`
+                            `brand_name.ilike."%${escapePostgrest(matchedName!)}%",generic_name.ilike."%${escapePostgrest(matchedName!)}%"`
                         )
                         .limit(1)
                         .maybeSingle();
@@ -701,7 +701,7 @@ router.post("/verify-brand", async (req: Request, res: Response) => {
                 "brand_name, generic_name, manufacturer, batch_number, expiry_date, cdsco_approval_status, is_counterfeit_alert"
             )
             .or(
-                `brand_name.ilike.%${escapeIlike(brandName)}%,generic_name.ilike.%${escapeIlike(brandName)}%`
+                `brand_name.ilike."%${escapePostgrest(brandName)}%",generic_name.ilike."%${escapePostgrest(brandName)}%"`
             )
             .limit(1)
             .maybeSingle();
