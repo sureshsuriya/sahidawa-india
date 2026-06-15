@@ -26,6 +26,8 @@ import LanguageSwitcher from "../LanguageSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import type { FC } from "react";
 import { useSession } from "@/src/components/AuthProvider";
+import { createBrowserClient } from "@supabase/ssr";
+import { getSupabaseUrl, getSupabaseAnonKey } from "@/lib/env";
 
 const desktopNavLinkClassName =
     "relative inline-flex items-center pb-1 transition-colors duration-200 ease-out hover:text-emerald-600 focus-visible:text-emerald-600 after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-current after:transition-transform after:duration-300 after:ease-out hover:after:scale-x-100 focus-visible:after:scale-x-100 motion-safe:after:will-change-transform";
@@ -143,6 +145,16 @@ export default function Navbar() {
         window.addEventListener("scroll", handleScroll, { passive: true });
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
+
+    const handleSignOut = async () => {
+        setIsProfileOpen(false);
+        setIsMenuOpen(false);
+        const supabase = createBrowserClient(getSupabaseUrl(), getSupabaseAnonKey());
+        await supabase.auth.signOut();
+        localStorage.removeItem("sb-access-token");
+        window.location.href = "/";
+    };
+
     useEffect(() => {
         setIsMenuOpen(false);
     }, [pathname]);
@@ -254,7 +266,7 @@ export default function Navbar() {
                                     onClick={() => setIsProfileOpen(!isProfileOpen)}
                                     className="flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 sm:h-10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                                 >
-                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400">
+                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
                                         <User size={14} />
                                     </div>
                                     <span className="max-w-[100px] truncate">
@@ -312,11 +324,7 @@ export default function Navbar() {
                                             </Link>
                                             <div className="my-1 border-t border-slate-100 dark:border-slate-900" />
                                             <button
-                                                onClick={() => {
-                                                    setIsProfileOpen(false);
-                                                    localStorage.removeItem("sb-access-token");
-                                                    window.location.href = "/";
-                                                }}
+                                                onClick={handleSignOut}
                                                 className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                                             >
                                                 <LogOut size={16} />
@@ -450,13 +458,10 @@ export default function Navbar() {
                                                 >
                                                     <Clock size={14} /> {tNav("schedule")}
                                                 </Link>
+                                                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                                                 <button
-                                                    onClick={() => {
-                                                        setIsMenuOpen(false);
-                                                        localStorage.removeItem("sb-access-token");
-                                                        window.location.href = "/";
-                                                    }}
-                                                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                                    onClick={handleSignOut}
+                                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                                                 >
                                                     <LogOut size={14} /> Sign Out
                                                 </button>
