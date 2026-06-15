@@ -263,6 +263,7 @@ router.post(
             res.status(200).json({
                 verified: true,
                 medicine: {
+                    id: data.id,
                     brand_name: data.brand_name,
                     generic_name: data.generic_name,
                     manufacturer: data.manufacturer,

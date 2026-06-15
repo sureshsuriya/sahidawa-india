@@ -549,6 +549,7 @@ router.post("/extract", uploadRateLimiter, validateUploadSize, (req: Request, re
             let medicineResponse = null;
             if (medicineData) {
                 medicineResponse = {
+                    id: medicineData.id,
                     brand_name: medicineData.brand_name,
                     generic_name: medicineData.generic_name,
                     manufacturer: medicineData.manufacturer,
@@ -698,7 +699,7 @@ router.post("/verify-brand", async (req: Request, res: Response) => {
         const { data, error } = await supabase
             .from("medicines")
             .select(
-                "brand_name, generic_name, manufacturer, batch_number, expiry_date, cdsco_approval_status, is_counterfeit_alert"
+                "id, brand_name, generic_name, manufacturer, batch_number, expiry_date, cdsco_approval_status, is_counterfeit_alert"
             )
             .or(
                 `brand_name.ilike.%${escapeIlike(brandName)}%,generic_name.ilike.%${escapeIlike(brandName)}%`
@@ -726,6 +727,7 @@ router.post("/verify-brand", async (req: Request, res: Response) => {
         res.status(200).json({
             verified: true,
             medicine: {
+                id: data.id,
                 brand_name: data.brand_name,
                 generic_name: data.generic_name,
                 manufacturer: data.manufacturer,

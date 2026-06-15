@@ -19,6 +19,7 @@ import {
     X,
     ScanLine,
     History,
+    ArrowRight,
 } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { PageHeader } from "../components/PageHeader";
@@ -160,6 +161,7 @@ function VerifiedSafeResult({
     onShare: () => void;
     shareLabel: string;
 }) {
+    const tScan = useTranslations("Scan");
     return (
         <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] border border-(--color-border-muted) bg-(--color-surface-page) p-8 text-(--color-text-primary) shadow-2xl">
             <div className="absolute top-0 right-0 left-0 h-2 bg-emerald-500"></div>
@@ -250,6 +252,16 @@ function VerifiedSafeResult({
                             seal before use.
                         </p>
                     </div>
+                )}
+
+                {medicine.id && (
+                    <Link
+                        href={`/calculator?medicineId=${medicine.id}`}
+                        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-600/15 transition-all duration-200 hover:bg-emerald-500 hover:shadow-emerald-500/25 active:scale-98"
+                    >
+                        <span>{tScan("calculateSavings")}</span>
+                        <ArrowRight size={16} />
+                    </Link>
                 )}
 
                 <ResultActions

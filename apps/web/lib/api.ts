@@ -148,6 +148,7 @@ export async function geocodePincode(
 }
 
 export type VerifiedMedicine = {
+    id?: string;
     brand_name: string;
     generic_name: string;
     manufacturer: string;

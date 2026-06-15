@@ -376,6 +376,22 @@ export default function PharmacyMapPage() {
         }
     }, [isOffline, isShowingCached]);
     useEffect(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            const latParam = params.get("lat");
+            const lngParam = params.get("lng");
+            if (latParam && lngParam) {
+                const lat = parseFloat(latParam);
+                const lng = parseFloat(lngParam);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    const loc = { lat, lng };
+                    setUserLocation(loc);
+                    fetchNearby(lat, lng);
+                    return;
+                }
+            }
+        }
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
