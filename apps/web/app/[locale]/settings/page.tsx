@@ -200,7 +200,7 @@ export default function SettingsPage() {
     return (
         <div className="flex-grow bg-(--color-surface-muted) px-6 py-8 text-(--color-text-primary)">
             <div className="mx-auto max-w-2xl">
-                <PageHeader backHref="/" variant="light" />
+                <PageHeader backHref="/profile" variant="light" />
 
                 {/* Header */}
                 <div className="mb-8 flex items-center gap-4">

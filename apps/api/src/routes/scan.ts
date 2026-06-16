@@ -510,7 +510,7 @@ router.post("/extract", uploadRateLimiter, validateUploadSize, (req: Request, re
                                 "composition, mrp, jan_aushadhi_price"
                         )
                         .or(
-                            `brand_name.ilike."%${escapePostgrest(matchedName!)}%",generic_name.ilike."%${escapePostgrest(matchedName!)}%"`
+                            `brand_name.ilike.%${escapePostgrest(matchedName!)}%,generic_name.ilike.%${escapePostgrest(matchedName!)}%`
                         )
                         .limit(1)
                         .maybeSingle();
@@ -660,7 +660,7 @@ router.post("/match", scanQueryLimiter, async (req: Request, res: Response) => {
 
                 for (const word of words) {
                     fallbackQuery = fallbackQuery.or(
-                        `brand_name.ilike."%${escapePostgrest(word)}%",generic_name.ilike."%${escapePostgrest(word)}%"`
+                        `brand_name.ilike.%${escapePostgrest(word)}%,generic_name.ilike.%${escapePostgrest(word)}%`
                     );
                 }
 

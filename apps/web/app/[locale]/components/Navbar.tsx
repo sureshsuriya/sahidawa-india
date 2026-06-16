@@ -19,6 +19,7 @@ import {
     Calculator,
     ChevronDown,
     Settings,
+    Wrench,
 } from "lucide-react";
 import { Link, usePathname } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
@@ -225,13 +226,6 @@ export default function Navbar() {
                         aria-label="Main navigation"
                     >
                         <Link
-                            href="/"
-                            className={desktopLinkClass("/")}
-                            aria-current={isActive("/") ? "page" : undefined}
-                        >
-                            {tNav("home")}
-                        </Link>
-                        <Link
                             href="/how-it-works"
                             className={desktopLinkClass("/how-it-works")}
                             aria-current={isActive("/how-it-works") ? "page" : undefined}
@@ -253,7 +247,7 @@ export default function Navbar() {
                                 className={`${desktopNavLinkClassName} flex items-center gap-1 ${isFeaturesOpen ? "text-emerald-600 dark:text-emerald-400" : ""}`}
                                 aria-expanded={isFeaturesOpen}
                             >
-                                {tNav("more")}
+                                <Wrench size={14} /> Tools
                                 <ChevronDown
                                     size={14}
                                     className={`transition-transform duration-200 ${isFeaturesOpen ? "rotate-180" : ""}`}
@@ -284,23 +278,6 @@ export default function Navbar() {
                                             className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                         >
                                             <ShieldCheck size={16} /> {tNav("scheme_eligibility")}
-                                        </Link>
-
-                                        <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-                                        <Link
-                                            href="/schedule"
-                                            onClick={() => setIsFeaturesOpen(false)}
-                                            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                                        >
-                                            <Clock size={16} /> {tNav("schedule")}
-                                        </Link>
-
-                                        <Link
-                                            href="/reports/me"
-                                            onClick={() => setIsFeaturesOpen(false)}
-                                            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                                        >
-                                            <History size={16} /> {tNav("my_reports")}
                                         </Link>
                                     </div>
                                 </div>
