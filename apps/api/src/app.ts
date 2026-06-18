@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser";
 import { doubleCsrf } from "csrf-csrf";
 import mapRouter from "./routes/map";
 import medicineSchedulesRouter from "./routes/medicineSchedules";
+import abhaRoutes from "./routes/abha";
 
 // ── Environment Configuration ──────────────────────────────────────────────
 const rootEnvPath = path.resolve(__dirname, "../../../.env");
@@ -220,6 +221,7 @@ app.use("/api/ml", mlRouter);
 app.use("/api/triage", triageRouter);
 app.use("/api/map", mapRouter);
 app.use("/api/schedules", medicineSchedulesRouter);
+app.use("/api/v1/abha", abhaRoutes);
 
 // ── Swagger UI Documentation (/api/docs) ──────────────────────────────────
 app.use(
