@@ -60,6 +60,15 @@
     },
     "Scan": {
         "calculateSavings": "Calculate Savings",
+        "scanMedicine": "Scan Medicine",
+        "positionBarcode": "Position the Barcode",
+        "enterBatchNumber": "Enter batch number",
+        "verify": "Verify",
+        "batchNumberHelp": "Enter the batch number from the medicine strip, or upload a photo from your gallery.",
+        "viewHistory": "View history",
+        "stopScanner": "Stop Scanner",
+        "scanBarcode": "Scan Barcode",
+        "uploadPhoto": "Upload Photo",
         "share": {
             "button": "Share Result",
             "title": "SahiDawa Medicine Verification Result",
@@ -963,5 +972,24 @@
             "timeout": "Location request timed out.",
             "generic": "Unable to get your location."
         }
+    },
+    "ABHA": {
+        "title": "ABHA Health Records",
+        "setupTitle": "ABHA Setup",
+        "recordsTitle": "ABHA Records",
+        "link": "Link ABHA",
+        "linked": "ABHA Linked",
+        "notLinked": "ABHA Not Linked",
+        "generateOtp": "Generate OTP",
+        "verifyOtp": "Verify OTP",
+        "enterAbha": "Enter ABHA Address",
+        "enterOtp": "Enter OTP",
+        "success": "ABHA successfully linked.",
+        "saveRecord": "Save to ABHA Record",
+        "noRecords": "No prescriptions found."
+    },
+    "Tracking": {
+        "success": "Medicine tracked successfully!",
+        "trackButton": "Track Expiry"
     }
 }

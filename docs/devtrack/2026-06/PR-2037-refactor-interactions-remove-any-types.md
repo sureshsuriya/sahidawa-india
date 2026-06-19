@@ -19,21 +19,21 @@ Prior to this change, the `apps/api/src/routes/interactions.ts` file contained i
 This refactoring focused on `apps/api/src/routes/interactions.ts` to improve type safety.
 
 1.  **Introduction of `MatchedInteraction` Interface:**
-    *   We defined a new TypeScript interface named `MatchedInteraction` at the top of the file (lines 48-57 in the diff). This interface explicitly outlines the expected structure for a drug interaction object retrieved from our database or external sources.
-    *   The `MatchedInteraction` interface includes the following string properties: `drugA`, `drugAGeneric`, `drugB`, `drugBGeneric`, `severity`, `mechanism`, `description`, `clinical_recommendation`, and `source`.
-    *   This interface now serves as the canonical type definition for matched drug interactions within our system.
+    - We defined a new TypeScript interface named `MatchedInteraction` at the top of the file (lines 48-57 in the diff). This interface explicitly outlines the expected structure for a drug interaction object retrieved from our database or external sources.
+    - The `MatchedInteraction` interface includes the following string properties: `drugA`, `drugAGeneric`, `drugB`, `drugBGeneric`, `severity`, `mechanism`, `description`, `clinical_recommendation`, and `source`.
+    - This interface now serves as the canonical type definition for matched drug interactions within our system.
 
 2.  **Strong Typing for `matchedInteractions` Array:**
-    *   The `matchedInteractions` array, which stores the results of drug interaction queries, was previously declared as `matchedInteractions: any[]`.
-    *   We updated its type declaration to `matchedInteractions: MatchedInteraction[]` (line 245 in the diff). This change ensures that only objects conforming to the `MatchedInteraction` interface can be added to this array, providing compile-time validation of the data structure.
+    - The `matchedInteractions` array, which stores the results of drug interaction queries, was previously declared as `matchedInteractions: any[]`.
+    - We updated its type declaration to `matchedInteractions: MatchedInteraction[]` (line 245 in the diff). This change ensures that only objects conforming to the `MatchedInteraction` interface can be added to this array, providing compile-time validation of the data structure.
 
 3.  **Refactored Error Handling with `unknown`:**
-    *   We replaced two instances of `catch (dbErr: any)` with `catch (dbErr: unknown)`.
-        *   The first instance is within the `resolveToGeneric` asynchronous function (line 131 in the diff), which handles resolving drug names to their generic counterparts, often involving database lookups.
-        *   The second instance is inside the `router.post("/check")` handler, specifically within the loop that iterates through drug pairs and queries for interactions (line 275 in the diff).
-    *   By changing the catch parameter type to `unknown`, TypeScript now mandates explicit type narrowing before `dbErr` can be used.
-    *   We implemented this narrowing using a ternary operator: `const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);`. This ensures that if `dbErr` is an actual `Error` object, its `message` property can be safely accessed. Otherwise, if it's a string, number, or any other type, it is gracefully converted to a string using `String(dbErr)`, preventing potential runtime crashes from attempting to access properties on non-object types.
-    *   The existing logic for checking specific error messages (e.g., "fetch failed", "refused") to determine if the database is offline (`dbFailed = true`) was preserved and integrated with the new type-safe error message extraction.
+    - We replaced two instances of `catch (dbErr: any)` with `catch (dbErr: unknown)`.
+        - The first instance is within the `resolveToGeneric` asynchronous function (line 131 in the diff), which handles resolving drug names to their generic counterparts, often involving database lookups.
+        - The second instance is inside the `router.post("/check")` handler, specifically within the loop that iterates through drug pairs and queries for interactions (line 275 in the diff).
+    - By changing the catch parameter type to `unknown`, TypeScript now mandates explicit type narrowing before `dbErr` can be used.
+    - We implemented this narrowing using a ternary operator: `const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);`. This ensures that if `dbErr` is an actual `Error` object, its `message` property can be safely accessed. Otherwise, if it's a string, number, or any other type, it is gracefully converted to a string using `String(dbErr)`, preventing potential runtime crashes from attempting to access properties on non-object types.
+    - The existing logic for checking specific error messages (e.g., "fetch failed", "refused") to determine if the database is offline (`dbFailed = true`) was preserved and integrated with the new type-safe error message extraction.
 
 ## Technical Decisions
 
@@ -49,9 +49,9 @@ To re-implement this type-safety refactoring, a contributor would follow these s
 
 1.  **Identify `any` usages:** Scan the target file, `apps/api/src/routes/interactions.ts`, for all occurrences of the `any` keyword. Pay particular attention to function parameters, variable declarations, and `catch` block parameters.
 2.  **Refactor `catch (err: any)` to `catch (err: unknown)`:**
-    *   Locate all `try...catch` blocks where the caught error is typed as `any`.
-    *   Change `catch (dbErr: any)` to `catch (dbErr: unknown)`.
-    *   Immediately after the `catch` declaration, implement type narrowing for `dbErr`. The pattern used in this PR is highly recommended:
+    - Locate all `try...catch` blocks where the caught error is typed as `any`.
+    - Change `catch (dbErr: any)` to `catch (dbErr: unknown)`.
+    - Immediately after the `catch` declaration, implement type narrowing for `dbErr`. The pattern used in this PR is highly recommended:
         ```typescript
         try {
             // ...
@@ -62,8 +62,8 @@ To re-implement this type-safety refactoring, a contributor would follow these s
         }
         ```
 3.  **Define Specific Interfaces for Data Structures:**
-    *   Identify any arrays or objects that are currently typed as `any[]` or `any` but hold a consistent data structure.
-    *   Based on the expected properties and their types, create a new TypeScript `interface`. For instance, for drug interactions, we defined `MatchedInteraction`:
+    - Identify any arrays or objects that are currently typed as `any[]` or `any` but hold a consistent data structure.
+    - Based on the expected properties and their types, create a new TypeScript `interface`. For instance, for drug interactions, we defined `MatchedInteraction`:
         ```typescript
         interface MatchedInteraction {
             drugA: string;
@@ -78,12 +78,12 @@ To re-implement this type-safety refactoring, a contributor would follow these s
         }
         ```
 4.  **Apply New Interfaces to Variable Declarations:**
-    *   Replace `any[]` with the newly defined interface array type. For example, change `const matchedInteractions: any[] = [];` to `const matchedInteractions: MatchedInteraction[] = [];`.
-    *   Ensure that any data being pushed into or assigned to this array conforms to the new interface. The TypeScript compiler will now enforce this, highlighting any type mismatches.
+    - Replace `any[]` with the newly defined interface array type. For example, change `const matchedInteractions: any[] = [];` to `const matchedInteractions: MatchedInteraction[] = [];`.
+    - Ensure that any data being pushed into or assigned to this array conforms to the new interface. The TypeScript compiler will now enforce this, highlighting any type mismatches.
 5.  **Gotchas and Considerations:**
-    *   **External Data:** When dealing with data from external APIs or databases (like Supabase in our case), ensure that the data structure returned by these services aligns with your new interfaces. If there's a mismatch, you might need to add runtime validation or mapping logic, or consider type assertions (`as MyInterface`) if you are absolutely certain of the data's shape after a check.
-    *   **Error Messages:** Be careful when relying on specific error message strings (e.g., `msg.includes("fetch failed")`). While effective, these can be brittle if underlying error messages change. Consider more robust error identification mechanisms if possible, though for network-related errors, string matching is often practical.
-    *   **Dependencies:** This refactoring primarily leverages core TypeScript language features and does not introduce any new external dependencies.
+    - **External Data:** When dealing with data from external APIs or databases (like Supabase in our case), ensure that the data structure returned by these services aligns with your new interfaces. If there's a mismatch, you might need to add runtime validation or mapping logic, or consider type assertions (`as MyInterface`) if you are absolutely certain of the data's shape after a check.
+    - **Error Messages:** Be careful when relying on specific error message strings (e.g., `msg.includes("fetch failed")`). While effective, these can be brittle if underlying error messages change. Consider more robust error identification mechanisms if possible, though for network-related errors, string matching is often practical.
+    - **Dependencies:** This refactoring primarily leverages core TypeScript language features and does not introduce any new external dependencies.
 
 ## Impact on System Architecture
 
@@ -102,14 +102,14 @@ While this PR primarily consists of a refactor and does not introduce new featur
 
 1.  **Existing Unit/Integration Tests:** We rely on our existing suite of unit and integration tests for the `/interactions/check` endpoint. These tests cover various scenarios for drug interaction lookups, including valid inputs, multiple drugs, and edge cases. Running these tests confirms that the core business logic remains unchanged and functional.
 2.  **Manual API Testing (Positive Cases):**
-    *   We manually tested the `/interactions/check` endpoint using tools like Postman or `curl` with known drug pairs (e.g., "paracetamol" and "ibuprofen") to verify that interactions are correctly identified and returned in the expected `MatchedInteraction` format.
-    *   We confirmed that the response structure matches the newly defined `MatchedInteraction` interface.
+    - We manually tested the `/interactions/check` endpoint using tools like Postman or `curl` with known drug pairs (e.g., "paracetamol" and "ibuprofen") to verify that interactions are correctly identified and returned in the expected `MatchedInteraction` format.
+    - We confirmed that the response structure matches the newly defined `MatchedInteraction` interface.
 3.  **Manual API Testing (Error Cases):**
-    *   **Database Offline Simulation:** Although not explicitly part of the PR, we would simulate a database connection failure (e.g., by temporarily invalidating Supabase credentials or blocking network access) to ensure that the `catch (dbErr: unknown)` block correctly identifies the `dbFailed` state and logs the error message gracefully without crashing the server.
-    *   **Unexpected Error Types:** We would ensure that if a non-`Error` object (e.g., a string or number) were somehow thrown in a `try` block, the `catch (dbErr: unknown)` logic would correctly convert it to a string via `String(dbErr)` and handle it without runtime errors.
+    - **Database Offline Simulation:** Although not explicitly part of the PR, we would simulate a database connection failure (e.g., by temporarily invalidating Supabase credentials or blocking network access) to ensure that the `catch (dbErr: unknown)` block correctly identifies the `dbFailed` state and logs the error message gracefully without crashing the server.
+    - **Unexpected Error Types:** We would ensure that if a non-`Error` object (e.g., a string or number) were somehow thrown in a `try` block, the `catch (dbErr: unknown)` logic would correctly convert it to a string via `String(dbErr)` and handle it without runtime errors.
 4.  **Type Checking:** The primary verification for this refactor is successful compilation by the TypeScript compiler. The absence of type errors after the changes confirms that `any` usages have been correctly replaced and type safety is enforced.
 
 **Edge Cases:**
 
-*   **External API Contract Changes:** If the external API (e.g., Supabase) that provides interaction data were to change its response structure, our new `MatchedInteraction` interface would immediately highlight discrepancies at compile time, which is a significant improvement over `any[]`. However, runtime validation might still be necessary if the external API contract is not strictly enforced or can vary.
-*   **Non-Error Throws:** While rare in well-structured code, JavaScript allows throwing any value. Our `dbErr instanceof Error ? dbErr.message : String(dbErr)` handles this gracefully, ensuring that even if a string or number is thrown, it can be logged without causing a crash.
+- **External API Contract Changes:** If the external API (e.g., Supabase) that provides interaction data were to change its response structure, our new `MatchedInteraction` interface would immediately highlight discrepancies at compile time, which is a significant improvement over `any[]`. However, runtime validation might still be necessary if the external API contract is not strictly enforced or can vary.
+- **Non-Error Throws:** While rare in well-structured code, JavaScript allows throwing any value. Our `dbErr instanceof Error ? dbErr.message : String(dbErr)` handles this gracefully, ensuring that even if a string or number is thrown, it can be logged without causing a crash.

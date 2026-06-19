@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { SkeletonLoader } from "@/components/scanner/SkeletonLoader";
+import imageCompression from "browser-image-compression";
+import { uploadABHAVerification } from "@/lib/api/abha";
+import { Camera, Layers, Search, X, ScanLine, History } from "lucide-react";
 import { useMedicineVerification } from "@/hooks/useMedicineVerification";
 import { VerifiedSafeResult } from "@/components/scanner/results/VerifiedSafeResult";
 import { CounterfeitAlertResult } from "@/components/scanner/results/CounterfeitAlertResult";
@@ -9,7 +12,6 @@ import { UnverifiedResult } from "@/components/scanner/results/UnverifiedResult"
 import { ErrorResult } from "@/components/scanner/results/ErrorResult";
 import { formatExpiryForBadge } from "@/lib/medicineDateUtils";
 import { useMedicineImageUpload } from "@/hooks/useMedicineImageUpload";
-import { Camera, Layers, Search, X, ScanLine, History } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "sonner";
@@ -73,20 +75,18 @@ export default function ScanPage() {
     const [copied, setCopied] = useState(false);
     const [batchInput, setBatchInput] = useState("");
     const [isCameraActive, setIsCameraActive] = useState(false);
-
     const [showResult, setShowResult] = useState(false);
+
     const {
         verifyResult,
         verifyError,
         lasaMatches,
         showLasaConfirmation,
         pendingVerifyResult,
-
         setVerifyResult,
         setVerifyError,
         setPendingVerifyResult,
         setShowLasaConfirmation,
-
         handleVerify,
         processVerificationResult,
     } = useMedicineVerification(abortControllerRef, isMountedRef, setIsScanning, setShowResult, {
@@ -115,7 +115,25 @@ export default function ScanPage() {
         setIsScanning,
     });
 
-    // Auto-retry when coming back online
+    const handleSaveToABHA = async () => {
+        if (!verifyResult?.verified) return;
+
+        try {
+            await uploadABHAVerification({
+                medicineId: "demo-medicine",
+                verificationResult: verifyResult.medicine.is_counterfeit_alert
+                    ? "counterfeit"
+                    : "verified",
+                scannedAt: new Date().toISOString(),
+            });
+
+            toast.success("Verification saved to ABHA");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to save to ABHA");
+        }
+    };
+
     const handleVerifyRef = useRef<(batch: string) => Promise<void>>(null as any);
 
     useEffect(() => {
@@ -139,7 +157,6 @@ export default function ScanPage() {
         };
     }, [showResult, verifyError, batchInput, registerRetryCallback, unregisterRetryCallback]);
 
-    // LASA Check State
     const shareCopy: VerificationShareCopy = {
         realStatus: tScan("share.real_status"),
         suspiciousStatus: tScan("share.suspicious_status"),
@@ -185,9 +202,7 @@ export default function ScanPage() {
         } catch (err) {
             if (!isMountedRef.current || controller.signal.aborted) return;
             const errorMsg = err instanceof Error ? err.message : "Verification failed";
-            if (errorMsg === "Request was cancelled.") {
-                return;
-            }
+            if (errorMsg === "Request was cancelled.") return;
             void saveScanHistory({
                 id: crypto.randomUUID(),
                 timestamp: Date.now(),
@@ -205,7 +220,6 @@ export default function ScanPage() {
         }
     };
 
-    // Keep handleVerifyRef current
     useEffect(() => {
         handleVerifyRef.current = handleVerify;
     }, [handleVerify]);
@@ -308,8 +322,8 @@ export default function ScanPage() {
             />
 
             <PageHeader
-                title="Scan Medicine"
-                subtitle="Position the Barcode"
+                title={tScan("scanMedicine")}
+                subtitle={tScan("positionBarcode")}
                 backHref="/"
                 variant="light"
             />
@@ -382,6 +396,7 @@ export default function ScanPage() {
                                 >
                                     <X size={24} />
                                 </button>
+
                                 {verifyError && (
                                     <ErrorResult
                                         message={verifyError}
@@ -389,6 +404,7 @@ export default function ScanPage() {
                                         isOffline={isOffline}
                                     />
                                 )}
+
                                 {!verifyError &&
                                     verifyResult?.verified &&
                                     verifyResult.medicine.is_counterfeit_alert && (
@@ -401,19 +417,62 @@ export default function ScanPage() {
                                             copied={copied}
                                         />
                                     )}
+
                                 {!verifyError &&
                                     verifyResult?.verified &&
                                     !verifyResult.medicine.is_counterfeit_alert && (
-                                        <VerifiedSafeResult
-                                            medicine={verifyResult.medicine}
-                                            scanMeta={verifyResult.scanMeta}
-                                            onScanAgain={handleScanAgain}
-                                            onShare={handleShare}
-                                            onCopyMedicineDetails={handleCopyMedicineDetails}
-                                            shareLabel={tScan("share.button")}
-                                            copied={copied}
-                                        />
+                                        <div className="flex w-full max-w-sm flex-col items-center gap-6">
+                                            {verifyResult.batch_status && (
+                                                <div
+                                                    className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold ${
+                                                        verifyResult.batch_status === "safe"
+                                                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                                            : verifyResult.batch_status ===
+                                                                "recalled"
+                                                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                                    }`}
+                                                >
+                                                    {verifyResult.batch_status === "safe" &&
+                                                        "Batch Safe"}
+                                                    {verifyResult.batch_status === "recalled" &&
+                                                        "Batch Recalled"}
+                                                    {verifyResult.batch_status === "unknown" &&
+                                                        "Batch Status Unknown"}
+                                                </div>
+                                            )}
+
+                                            {verifyResult.batch_status === "recalled" && (
+                                                <div className="w-full max-w-sm rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-900/10">
+                                                    <p className="text-sm font-bold text-red-700 dark:text-red-400">
+                                                        This batch has been recalled
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-red-600 dark:text-red-300">
+                                                        Please do not use this medicine. Return it
+                                                        to your pharmacy immediately.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <VerifiedSafeResult
+                                                medicine={verifyResult.medicine}
+                                                scanMeta={verifyResult.scanMeta}
+                                                onScanAgain={handleScanAgain}
+                                                onShare={handleShare}
+                                                shareLabel={tScan("share.button")}
+                                                onCopyMedicineDetails={handleCopyMedicineDetails}
+                                                copied={copied}
+                                            />
+
+                                            <button
+                                                onClick={handleSaveToABHA}
+                                                className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
+                                            >
+                                                Save to ABHA Record
+                                            </button>
+                                        </div>
                                     )}
+
                                 {!verifyError && verifyResult && !verifyResult.verified && (
                                     <UnverifiedResult
                                         brandName={parsedBrand}
@@ -465,7 +524,7 @@ export default function ScanPage() {
                         type="text"
                         value={batchInput}
                         onChange={(e) => setBatchInput(e.target.value)}
-                        placeholder="Enter batch number"
+                        placeholder={tScan("enterBatchNumber")}
                         className="flex-1 rounded-full border border-(--color-border-muted) bg-(--color-surface-muted) px-4 py-3 text-center text-sm font-medium text-(--color-text-primary) placeholder-(--color-text-muted) focus:border-transparent focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:border-white/20 dark:bg-white/10 dark:text-white dark:placeholder-white/40"
                     />
                     <button
@@ -474,21 +533,22 @@ export default function ScanPage() {
                         className="flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Search size={18} />
-                        {isOffline ? tScan("offlineVerify") : "Verify"}
+                        {isOffline ? tScan("offlineVerify") : tScan("verify")}
                     </button>
                 </form>
 
                 <p className="max-w-xs text-center text-sm font-medium text-slate-400">
-                    Enter the batch number from the medicine strip, or upload a photo from your
-                    gallery.
+                    {tScan("batchNumberHelp")}
                 </p>
+
                 <Link
                     href="/history"
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-white/20 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-black focus:outline-none dark:border-white/20"
                 >
                     <History size={18} />
-                    View history
+                    {tScan("viewHistory")}
                 </Link>
+
                 <div className="flex gap-4">
                     <button
                         onClick={() => setIsCameraActive((prev) => !prev)}
@@ -499,14 +559,14 @@ export default function ScanPage() {
                         }`}
                     >
                         <ScanLine size={18} />
-                        {isCameraActive ? "Stop Scanner" : "Scan Barcode"}
+                        {isCameraActive ? tScan("stopScanner") : tScan("scanBarcode")}
                     </button>
                     <label
                         htmlFor="medicine-upload"
                         className="flex cursor-pointer items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-black shadow-lg transition-colors hover:bg-slate-200"
                     >
                         <Layers size={18} />
-                        Upload Photo
+                        {tScan("uploadPhoto")}
                     </label>
                 </div>
             </div>

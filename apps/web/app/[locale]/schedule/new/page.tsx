@@ -2,8 +2,8 @@
 
 import { useRouter } from "@/i18n/routing";
 import { useCallback, useState } from "react";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { Link } from "@/i18n/routing";
+import { Plus, Trash2 } from "lucide-react";
+
 import { PageHeader } from "../../components/PageHeader";
 import Card from "@/components/Card";
 import MedicineSearchSelect from "@/src/components/MedicineSearchSelect";
