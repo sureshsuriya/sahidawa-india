@@ -749,5 +749,29 @@
         "placeholder": "Type your health concern...",
         "sendMessage": "Send message",
         "footer": "For informational use only • Consult a doctor"
+    },
+    "schedule": {
+        "pageTitle": "दवा का शेड्यूल",
+        "pageSubtitle": "अपनी रोज़ाना की दवाओं को ट्रैक करें",
+        "heading": "मेरी दवाएं",
+        "headingDescription": "अपनी रोज़ाना की दवाओं के डोज़ को ट्रैक करें।",
+        "refreshAriaLabel": "रिफ्रेश करें",
+        "addMedicine": "दवा जोड़ें",
+        "authErrorTitle": "साइन इन आवश्यक है",
+        "authErrorDescription": "रिमाइंडर सेट करने के लिए कृपया साइन इन करें।",
+        "authErrorAction": "लॉगिन पर जाएं",
+        "networkErrorTitle": "कनेक्शन त्रुटि",
+        "networkErrorAction": "पुनः प्रयास करें",
+        "emptyTitle": "अभी तक कोई दवा ट्रैक नहीं की गई",
+        "emptyDescription": "अपनी पहली दवा जोड़ें ताकि आप डोज़ ट्रैक कर सकें और रिमाइंडर प्राप्त कर सकें।",
+        "emptyAction": "दवा जोड़ें",
+        "statusTaken": "ले ली गई",
+        "statusSkipped": "छोड़ दी गई",
+        "statusPending": "बाकी है",
+        "statusUpcoming": "आने वाली है",
+        "actionTaken": "ली गई",
+        "actionTake": "लें",
+        "actionSkip": "छोड़ें",
+        "doseErrorMessage": "सेव नहीं हो सका। कृपया पुनः प्रयास करें।"
     }
 }
