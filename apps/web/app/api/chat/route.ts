@@ -4,6 +4,7 @@ import { detectEmergencyKeywords } from "@/lib/voice/emergency";
 import { rateLimit } from "@/lib/rateLimit";
 import { BASE_PROMPT } from "@/lib/chatPrompts";
 import { structuredLog } from "@/lib/structuredLogger";
+import { ChatRoles, ChatRole } from "@/lib/constants";
 
 const DEFAULT_DISCLAIMER =
     "This guidance is for informational use only and is not a diagnosis. Consult a doctor or pharmacist, especially for severe or persistent symptoms.";
@@ -11,7 +12,7 @@ const DEFAULT_DISCLAIMER =
 type ChatMessage = {
     text?: string;
     content?: string;
-    role?: string;
+    role?: ChatRole | string;
 };
 
 type VoiceTriageResponse = {
@@ -41,7 +42,7 @@ function getLatestMessageText(messages: ChatMessage[] | undefined) {
 function mapMessagesToGeminiContents(messages: ChatMessage[]) {
     return messages.map((msg) => {
         const text = msg.text || msg.content || "";
-        const role = msg.role === "assistant" ? "model" : "user";
+        const role = msg.role === ChatRoles.ASSISTANT ? ChatRoles.MODEL : ChatRoles.USER;
         return { role, parts: [{ text }] };
     });
 }
@@ -183,13 +184,16 @@ export async function POST(req: Request) {
                     process.env.NEXT_PUBLIC_ML_SERVICE_URL?.trim() ||
                     "http://localhost:8000";
                 const formattedMessages = (messages || []).map((m: any) => ({
-                    role: m.role === "assistant" || m.role === "model" ? "assistant" : "user",
+                    role:
+                        m.role === ChatRoles.ASSISTANT || m.role === ChatRoles.MODEL
+                            ? ChatRoles.ASSISTANT
+                            : ChatRoles.USER,
                     content: m.text || m.content || "",
                 }));
 
                 // If there's no history, initialize with the current message
                 if (formattedMessages.length === 0) {
-                    formattedMessages.push({ role: "user", content: latestMessageText });
+                    formattedMessages.push({ role: ChatRoles.USER, content: latestMessageText });
                 }
 
                 const mlResponse = await fetch(`${mlServiceUrl}/triage/chat`, {
