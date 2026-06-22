@@ -1,32 +1,64 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pill, Plus } from "lucide-react";
 
+interface TrackedMedicine {
+    id: string;
+    medicine_name: string;
+    expiry_date: string;
+}
+
+function getDaysUntilExpiry(expiryDate: string): number {
+    const diff = new Date(expiryDate).getTime() - new Date().getTime();
+    return Math.ceil(diff / (1000 * 3600 * 24));
+}
+
+function getStatusColor(daysLeft: number): string {
+    if (daysLeft < 7) return "bg-red-500";
+    if (daysLeft < 14) return "bg-orange-500";
+    if (daysLeft < 30) return "bg-yellow-500";
+    return "bg-green-500";
+}
+
 export default function MyMedicinesPage() {
-    const [medicines, setMedicines] = useState<any[]>([]);
+    const [medicines, setMedicines] = useState<TrackedMedicine[]>([]);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         fetch("/api/v1/medicines/tracked")
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+                return res.json();
+            })
             .then((data) => setMedicines(Array.isArray(data) ? data : []))
-            .catch(() => setMedicines([]));
+            .catch((err: Error) => {
+                console.error("Failed to fetch tracked medicines:", err);
+                setError("Failed to load medicines. Please try again.");
+                setMedicines([]);
+            });
     }, []);
 
-    const getStatusColor = (expiryDate: string) => {
-        const diff = new Date(expiryDate).getTime() - new Date().getTime();
-        const days = Math.ceil(diff / (1000 * 3600 * 24));
-        if (days < 7) return "bg-red-500";
-        if (days < 14) return "bg-orange-500";
-        if (days < 30) return "bg-yellow-500";
-        return "bg-green-500";
-    };
+    const medicinesWithDays = useMemo(
+        () =>
+            medicines.map((m) => ({
+                ...m,
+                daysLeft: getDaysUntilExpiry(m.expiry_date),
+            })),
+        [medicines]
+    );
 
     return (
         <div className="mx-auto w-full max-w-4xl min-w-[320px] p-6">
             <h1 className="mb-4 text-2xl font-bold">My Tracked Medicines</h1>
 
-            {medicines.length === 0 ? (
+            {error && (
+                <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
+                    {error}
+                </p>
+            )}
+
+            {medicines.length === 0 && !error ? (
                 /* --- Centered Empty State Wrapper --- */
                 <div className="flex flex-col items-center justify-center space-y-4 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-16 text-center dark:border-slate-800 dark:bg-slate-900/20">
                     <div className="rounded-full bg-emerald-50 p-4 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
@@ -61,20 +93,16 @@ export default function MyMedicinesPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {medicines.map((m: any) => (
+                        {medicinesWithDays.map((m) => (
                             <tr key={m.id}>
                                 <td className="border p-2">{m.medicine_name}</td>
                                 <td className="border p-2">
                                     {new Date(m.expiry_date).toLocaleDateString()}
                                 </td>
                                 <td
-                                    className={`border p-2 text-white ${getStatusColor(m.expiry_date)}`}
+                                    className={`border p-2 text-white ${getStatusColor(m.daysLeft)}`}
                                 >
-                                    {Math.ceil(
-                                        (new Date(m.expiry_date).getTime() - new Date().getTime()) /
-                                            (1000 * 3600 * 24)
-                                    )}{" "}
-                                    days left
+                                    {m.daysLeft} days left
                                 </td>
                             </tr>
                         ))}
