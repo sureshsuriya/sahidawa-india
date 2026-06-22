@@ -53,6 +53,7 @@ if not ocr_loaded:
 tts_loaded = include_router_if_available(app, "routers.tts", required=False)
 if not tts_loaded:
     logger.warning("TTS routes are disabled. Install google-cloud-texttospeech or configure Azure TTS.")
+include_router_if_available(app, "routers.voice_verify", required=True)
 
 @app.get("/")
 def read_root():
