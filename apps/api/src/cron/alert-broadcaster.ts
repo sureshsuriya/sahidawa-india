@@ -3,11 +3,15 @@ import { smsService } from "../services/sms-service";
 import { whatsappService } from "../services/whatsapp-service";
 import logger from "../utils/logger";
 import { NotificationSubscriber, NotificationAlertData } from "../types/notification.types";
+import { redisClient } from "../utils/redis";
 
 let intervalId: NodeJS.Timeout | null = null;
 const CHECK_INTERVAL_MS = process.env.NODE_ENV === "test" ? 1000 : 30000; // 30 seconds
 const PAGE_SIZE = 1000;
 const NOTIFICATION_CHUNK_SIZE = 50;
+const LOCK_KEY = "alert-broadcaster:lock";
+const LOCK_TTL_MS = 25_000; // slightly under the 30-second interval
+const LOCK_VALUE = `${process.env.HOSTNAME ?? "api"}:${process.pid}`;
 
 export function getLocalizedMessage(
     type: "counterfeit" | "recall" | "expiry",
@@ -74,6 +78,41 @@ export function getLocalizedMessage(
     const title = titleMatch ? titleMatch[1] : "SahiDawa Alert";
 
     return { title, body };
+}
+
+async function acquireLock(): Promise<boolean> {
+    if (!redisClient.isOpen) {
+        // Redis unavailable — fall back to running (risk duplicate sends is preferable to silent drop)
+        logger.warn("Redis not connected; skipping distributed lock for alert broadcaster.");
+        return true;
+    }
+    try {
+        const result = await redisClient.set(LOCK_KEY, LOCK_VALUE, {
+            NX: true,
+            PX: LOCK_TTL_MS,
+        });
+        return result === "OK";
+    } catch (err) {
+        logger.error({ message: "Failed to acquire broadcaster lock", error: err });
+        return false;
+    }
+}
+
+async function releaseLock(): Promise<void> {
+    if (!redisClient.isOpen) return;
+    try {
+        // Only release if this process still owns the lock (Lua script for atomicity)
+        const script = `
+            if redis.call("get", KEYS[1]) == ARGV[1] then
+                return redis.call("del", KEYS[1])
+            else
+                return 0
+            end
+        `;
+        await redisClient.eval(script, { keys: [LOCK_KEY], arguments: [LOCK_VALUE] });
+    } catch (err) {
+        logger.error({ message: "Failed to release broadcaster lock", error: err });
+    }
 }
 
 async function sendNotificationToSubscriber(
@@ -398,9 +437,20 @@ export async function checkAndBroadcastAll(): Promise<void> {
         logger.debug("Supabase database is offline. Skipping cron alert broadcasting.");
         return;
     }
-    await broadcastDistrictAlerts();
-    await broadcastDrugAlerts();
-    await broadcastExpiryAlerts();
+
+    const acquired = await acquireLock();
+    if (!acquired) {
+        logger.info("Alert broadcaster lock held by another instance — skipping this tick.");
+        return;
+    }
+
+    try {
+        await broadcastDistrictAlerts();
+        await broadcastDrugAlerts();
+        await broadcastExpiryAlerts();
+    } finally {
+        await releaseLock();
+    }
 }
 
 export function startAlertBroadcaster(): void {
