@@ -3,6 +3,7 @@ import app from "./app";
 import { createGracefulShutdown } from "./gracefulShutdown";
 import logger from "./utils/logger";
 import { startAlertBroadcaster } from "./cron/alert-broadcaster";
+import { startTempCleanupJob } from "./cron/tempCleanup";
 import { connectRedis } from "./utils/redis";
 import { warmCache } from "./services/cache.service";
 
@@ -22,6 +23,7 @@ if (process.env.NODE_ENV !== "test") {
     });
 
     startAlertBroadcaster();
+    startTempCleanupJob();
 
     const gracefulShutdown = createGracefulShutdown(server);
 
