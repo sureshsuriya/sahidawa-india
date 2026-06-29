@@ -22,7 +22,7 @@ jest.mock("next/image", () => ({
         src: string;
         [key: string]: unknown;
     }) => {
-        const { priority, ...rest } = props as any;
+        const { priority: _priority, ...rest } = props as any;
         return <img src={src} alt={alt} {...rest} />;
     },
 }));
