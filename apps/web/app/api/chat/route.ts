@@ -157,6 +157,40 @@ function getAiClient() {
     return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
+async function withRetry<T>(
+    operation: () => Promise<T>,
+    route: string,
+    operationName: string
+): Promise<T> {
+    const maxRetries = 3;
+    const initialDelay = process.env.NODE_ENV === "test" ? 10 : 1000;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error: any) {
+            const statusCode = error?.status;
+            if ((statusCode === 503 || statusCode === 429) && attempt < maxRetries) {
+                const delay = initialDelay * Math.pow(2, attempt);
+                structuredLog({
+                    log_level: "warn",
+                    route,
+                    meta: {
+                        reason: `${operationName}_retry`,
+                        attempt: attempt + 1,
+                        delay_ms: delay,
+                        status: statusCode,
+                    },
+                });
+                await new Promise((res) => setTimeout(res, delay));
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw new Error("Unreachable");
+}
+
 export async function POST(req: Request) {
     const ROUTE = "/api/chat";
     const startTime = Date.now();
@@ -336,21 +370,27 @@ export async function POST(req: Request) {
                 });
 
                 // Fallback direct Gemini call
-                const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
-                    contents: buildVoiceTriagePrompt(
-                        latestMessageText,
-                        typeof responseLanguage === "string" && responseLanguage.trim().length > 0
-                            ? responseLanguage.trim()
-                            : "English"
-                    ),
-                    config: {
-                        systemInstruction:
-                            "You are the SahiDawa voice triage assistant for India. Help users understand possible next steps based on symptoms, but never claim certainty or replace medical professionals. Be calm, concise, practical, and safety-first.",
-                        responseMimeType: "application/json",
-                        responseSchema: VOICE_TRIAGE_SCHEMA,
-                    },
-                });
+                const response = await withRetry(
+                    () =>
+                        ai.models.generateContent({
+                            model: "gemini-3.5-flash",
+                            contents: buildVoiceTriagePrompt(
+                                latestMessageText,
+                                typeof responseLanguage === "string" &&
+                                    responseLanguage.trim().length > 0
+                                    ? responseLanguage.trim()
+                                    : "English"
+                            ),
+                            config: {
+                                systemInstruction:
+                                    "You are the SahiDawa voice triage assistant for India. Help users understand possible next steps based on symptoms, but never claim certainty or replace medical professionals. Be calm, concise, practical, and safety-first.",
+                                responseMimeType: "application/json",
+                                responseSchema: VOICE_TRIAGE_SCHEMA,
+                            },
+                        }),
+                    ROUTE,
+                    "gemini_fallback"
+                );
 
                 parsedResponse = parseVoiceTriageResponse(response.text ?? "");
                 emergencyFromML = parsedResponse.emergency;
@@ -386,10 +426,15 @@ export async function POST(req: Request) {
 
                 if (!summary) {
                     const summaryPrompt = `Summarize the following conversation history briefly to retain key context for the ongoing chat. Keep it concise.\n\n${droppedText}`;
-                    const summaryResponse = await ai.models.generateContent({
-                        model: "gemini-3.5-flash",
-                        contents: summaryPrompt,
-                    });
+                    const summaryResponse = await withRetry(
+                        () =>
+                            ai.models.generateContent({
+                                model: "gemini-3.5-flash",
+                                contents: summaryPrompt,
+                            }),
+                        ROUTE,
+                        "gemini_summary"
+                    );
 
                     summary = summaryResponse.text || "";
                     if (summary) {
@@ -475,15 +520,25 @@ export async function POST(req: Request) {
         const language = localeMap[finalLocale as keyof typeof localeMap] || "English";
         const systemPrompt = BASE_PROMPT.replace("{language}", language);
 
-        const responseStream = (await ai.models.generateContentStream({
-            model: "gemini-3.5-flash",
-            contents: formattedContents,
-            config: {
-                systemInstruction: systemPrompt,
+        const { responseIterator, firstStreamResult } = await withRetry(
+            async () => {
+                const stream = (await ai.models.generateContentStream({
+                    model: "gemini-3.5-flash",
+                    contents: formattedContents,
+                    config: {
+                        systemInstruction: systemPrompt,
+                    },
+                })) as AsyncIterable<TextStreamChunk>;
+                const iterator = stream[Symbol.asyncIterator]();
+                const firstResult = await iterator.next();
+                return {
+                    responseIterator: iterator,
+                    firstStreamResult: firstResult,
+                };
             },
-        })) as AsyncIterable<TextStreamChunk>;
-        const responseIterator = responseStream[Symbol.asyncIterator]();
-        const firstStreamResult = await responseIterator.next();
+            ROUTE,
+            "gemini_stream"
+        );
 
         const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({

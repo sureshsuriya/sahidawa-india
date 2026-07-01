@@ -155,7 +155,9 @@ describe("POST /api/chat", () => {
     });
 
     it("returns the existing JSON error response when Gemini stream fails before first chunk", async () => {
-        generateContentStreamMock.mockResolvedValue(createFailingTextStream({ status: 503 }));
+        generateContentStreamMock.mockImplementation(() =>
+            Promise.resolve(createFailingTextStream({ status: 503 }))
+        );
 
         const response = await POST(
             new Request("http://localhost/api/chat", {
