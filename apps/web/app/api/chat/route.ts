@@ -142,6 +142,25 @@ function isErrorWithStatus(error: unknown): error is ErrorWithStatus {
     );
 }
 
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+    const maxRetries = 3;
+    let attempt = 0;
+    while (true) {
+        try {
+            return await fn();
+        } catch (error: unknown) {
+            const status = isErrorWithStatus(error) ? error.status : undefined;
+            if ((status === 429 || status === 503) && attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                attempt++;
+                continue;
+            }
+            throw error;
+        }
+    }
+}
+
 function buildVoiceTriagePrompt(transcript: string, responseLanguage: string) {
     return [
         `Citizen transcript: ${JSON.stringify(transcript)}`,
@@ -336,21 +355,24 @@ export async function POST(req: Request) {
                 });
 
                 // Fallback direct Gemini call
-                const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
-                    contents: buildVoiceTriagePrompt(
-                        latestMessageText,
-                        typeof responseLanguage === "string" && responseLanguage.trim().length > 0
-                            ? responseLanguage.trim()
-                            : "English"
-                    ),
-                    config: {
-                        systemInstruction:
-                            "You are the SahiDawa voice triage assistant for India. Help users understand possible next steps based on symptoms, but never claim certainty or replace medical professionals. Be calm, concise, practical, and safety-first.",
-                        responseMimeType: "application/json",
-                        responseSchema: VOICE_TRIAGE_SCHEMA,
-                    },
-                });
+                const response = await withRetry(() =>
+                    ai.models.generateContent({
+                        model: "gemini-3.5-flash",
+                        contents: buildVoiceTriagePrompt(
+                            latestMessageText,
+                            typeof responseLanguage === "string" &&
+                                responseLanguage.trim().length > 0
+                                ? responseLanguage.trim()
+                                : "English"
+                        ),
+                        config: {
+                            systemInstruction:
+                                "You are the SahiDawa voice triage assistant for India. Help users understand possible next steps based on symptoms, but never claim certainty or replace medical professionals. Be calm, concise, practical, and safety-first.",
+                            responseMimeType: "application/json",
+                            responseSchema: VOICE_TRIAGE_SCHEMA,
+                        },
+                    })
+                );
 
                 parsedResponse = parseVoiceTriageResponse(response.text ?? "");
                 emergencyFromML = parsedResponse.emergency;
@@ -386,10 +408,12 @@ export async function POST(req: Request) {
 
                 if (!summary) {
                     const summaryPrompt = `Summarize the following conversation history briefly to retain key context for the ongoing chat. Keep it concise.\n\n${droppedText}`;
-                    const summaryResponse = await ai.models.generateContent({
-                        model: "gemini-3.5-flash",
-                        contents: summaryPrompt,
-                    });
+                    const summaryResponse = await withRetry(() =>
+                        ai.models.generateContent({
+                            model: "gemini-3.5-flash",
+                            contents: summaryPrompt,
+                        })
+                    );
 
                     summary = summaryResponse.text || "";
                     if (summary) {
@@ -475,13 +499,15 @@ export async function POST(req: Request) {
         const language = localeMap[finalLocale as keyof typeof localeMap] || "English";
         const systemPrompt = BASE_PROMPT.replace("{language}", language);
 
-        const responseStream = (await ai.models.generateContentStream({
-            model: "gemini-3.5-flash",
-            contents: formattedContents,
-            config: {
-                systemInstruction: systemPrompt,
-            },
-        })) as AsyncIterable<TextStreamChunk>;
+        const responseStream = (await withRetry(() =>
+            ai.models.generateContentStream({
+                model: "gemini-3.5-flash",
+                contents: formattedContents,
+                config: {
+                    systemInstruction: systemPrompt,
+                },
+            })
+        )) as AsyncIterable<TextStreamChunk>;
         const responseIterator = responseStream[Symbol.asyncIterator]();
         const firstStreamResult = await responseIterator.next();
 
