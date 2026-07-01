@@ -54,6 +54,10 @@ export default function LoginPage() {
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
 
+    const getAuthErrorMessage = (message: string) => {
+        return message === "Failed to fetch" ? t("errors.generic") : message;
+    };
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -73,7 +77,7 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                setError(getAuthErrorMessage(error.message));
                 setLoading(false);
                 return;
             }
@@ -107,7 +111,7 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                setError(getAuthErrorMessage(error.message));
                 setLoading(false);
             }
         } catch {
@@ -134,7 +138,7 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                setError(getAuthErrorMessage(error.message));
                 setLoading(false);
             }
         } catch {
