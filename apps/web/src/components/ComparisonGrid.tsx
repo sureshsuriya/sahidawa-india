@@ -207,14 +207,30 @@ function shareComparison(medicine1: Medicine | null, medicine2: Medicine | null)
     navigator.clipboard.writeText(url);
 }
 
+type ComparisonGridProps =
+    | {
+          medicines: (Medicine | null)[];
+          medicine1?: never;
+          medicine2?: never;
+          labels?: ComparisonGridLabels;
+      }
+    | {
+          medicine1: Medicine | null;
+          medicine2: Medicine | null;
+          medicines?: never;
+          labels?: ComparisonGridLabels;
+      };
+
 export default function ComparisonGrid({
     medicines,
+    medicine1,
+    medicine2,
     labels = defaultLabels,
-}: {
-    medicines: (Medicine | null)[];
-    labels?: ComparisonGridLabels;
-}) {
-    const validMedicines = medicines.filter((m): m is Medicine => m !== null);
+}: ComparisonGridProps) {
+    const resolvedMedicines: (Medicine | null)[] =
+        medicines !== undefined ? medicines : [medicine1 ?? null, medicine2 ?? null];
+
+    const validMedicines = resolvedMedicines.filter((m): m is Medicine => m !== null);
 
     if (validMedicines.length === 0) {
         return (
