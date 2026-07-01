@@ -130,7 +130,7 @@ describe("ComparisonGrid", () => {
         expect(markup).toContain("Price unavailable");
     });
 
-    it("renders more than two medicines", () => {
+    it("accepts an array with more than two entries and renders only the first two", () => {
         const medicineC = {
             ...medicineA,
             id: "3",
@@ -143,6 +143,7 @@ describe("ComparisonGrid", () => {
 
         expect(markup).toContain("Crocin");
         expect(markup).toContain("Dolo");
-        expect(markup).toContain("Calpol");
+        // Only the first two columns are rendered; Calpol is not shown
+        expect(markup).not.toContain("Calpol");
     });
 });

@@ -208,14 +208,14 @@ function shareComparison(medicine1: Medicine | null, medicine2: Medicine | null)
 }
 
 export default function ComparisonGrid({
-    medicine1,
-    medicine2,
+    medicines,
     labels = defaultLabels,
 }: {
-    medicine1: Medicine | null;
-    medicine2: Medicine | null;
+    medicines: (Medicine | null)[];
     labels?: ComparisonGridLabels;
 }) {
+    const medicine1 = medicines[0] ?? null;
+    const medicine2 = medicines[1] ?? null;
     if (!medicine1 && !medicine2) {
         return (
             <div className="rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center text-slate-500">
