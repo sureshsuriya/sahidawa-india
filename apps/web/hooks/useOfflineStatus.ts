@@ -10,7 +10,7 @@ export const useOfflineStatus = () => {
     const [isStatusDirty, setIsStatusDirty] = useState(false);
     const [isTestMode, setIsTestMode] = useState(false);
     const retryCallbacksRef = useRef<Set<() => void>>(new Set());
-    const timeoutRef = useRef<NodeJS.Timeout>();
+    const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
     useEffect(() => {
         // Check if we're in test mode
