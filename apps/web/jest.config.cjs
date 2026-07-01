@@ -12,6 +12,7 @@ module.exports = {
     testPathIgnorePatterns: ["<rootDir>/tests/e2e/"],
     workerIdleMemoryLimit: "512MB",
     workerThreads: true,
+    reporters: ["default", "<rootDir>/tests/reporter.cjs"],
     moduleNameMapper: {
         "\\.css$": "<rootDir>/tests/mocks/styleMock.ts",
         "^leaflet$": "<rootDir>/tests/mocks/leaflet.ts",

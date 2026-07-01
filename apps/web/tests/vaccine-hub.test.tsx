@@ -139,13 +139,8 @@ describe("VaccineHubPage Integration Tests", () => {
 
     it("shows a validation message for future child dates of birth", async () => {
         render(<VaccineHubPage />);
-        const futureDate = new Date();
-        futureDate.setDate(futureDate.getDate() + 1);
 
-        await user.type(
-            screen.getByLabelText("Date of birth"),
-            futureDate.toISOString().split("T")[0]
-        );
+        await user.type(screen.getByLabelText("Date of birth"), "3000-01-01");
 
         expect(screen.getByText("Date of birth cannot be in the future.")).toBeInTheDocument();
     });
