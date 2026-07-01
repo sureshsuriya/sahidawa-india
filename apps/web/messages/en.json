@@ -660,7 +660,8 @@
         "bottomText": "Protected access for SahiDawa community tools.",
         "errors": {
             "databaseNotConfigured": "Authentication is not configured for this environment.",
-            "generic": "Unable to sign in. Please try again."
+            "generic": "Unable to sign in. Please try again.",
+            "network": "Unable to connect to the server. Please check your internet connection."
         }
     },
     "SignUp": {
@@ -696,6 +697,7 @@
         "errors": {
             "databaseNotConfigured": "Authentication is not configured for this environment.",
             "generic": "Unable to create account. Please try again.",
+            "network": "Unable to connect to the server. Please check your internet connection.",
             "fullNameRequired": "Full name is required.",
             "emailRequired": "Email address is required.",
             "emailInvalid": "Please enter a valid email address.",

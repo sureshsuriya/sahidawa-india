@@ -73,7 +73,14 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                let errorMessage = error.message;
+                if (
+                    errorMessage.includes("Failed to fetch") ||
+                    errorMessage.includes("NetworkError")
+                ) {
+                    errorMessage = t("errors.network");
+                }
+                setError(errorMessage);
                 setLoading(false);
                 return;
             }
@@ -81,8 +88,15 @@ export default function LoginPage() {
             if (data?.session?.access_token) {
                 router.push("/reports/me");
             }
-        } catch {
-            setError(t("errors.generic"));
+        } catch (err: any) {
+            let errorMessage = t("errors.generic");
+            if (
+                err?.message?.includes("Failed to fetch") ||
+                err?.message?.includes("NetworkError")
+            ) {
+                errorMessage = t("errors.network");
+            }
+            setError(errorMessage);
         }
 
         setLoading(false);
@@ -107,11 +121,25 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                let errorMessage = error.message;
+                if (
+                    errorMessage.includes("Failed to fetch") ||
+                    errorMessage.includes("NetworkError")
+                ) {
+                    errorMessage = t("errors.network");
+                }
+                setError(errorMessage);
                 setLoading(false);
             }
-        } catch {
-            setError(t("errors.generic"));
+        } catch (err: any) {
+            let errorMessage = t("errors.generic");
+            if (
+                err?.message?.includes("Failed to fetch") ||
+                err?.message?.includes("NetworkError")
+            ) {
+                errorMessage = t("errors.network");
+            }
+            setError(errorMessage);
             setLoading(false);
         }
     };
@@ -134,11 +162,25 @@ export default function LoginPage() {
             });
 
             if (error) {
-                setError(error.message);
+                let errorMessage = error.message;
+                if (
+                    errorMessage.includes("Failed to fetch") ||
+                    errorMessage.includes("NetworkError")
+                ) {
+                    errorMessage = t("errors.network");
+                }
+                setError(errorMessage);
                 setLoading(false);
             }
-        } catch {
-            setError(t("errors.generic"));
+        } catch (err: any) {
+            let errorMessage = t("errors.generic");
+            if (
+                err?.message?.includes("Failed to fetch") ||
+                err?.message?.includes("NetworkError")
+            ) {
+                errorMessage = t("errors.network");
+            }
+            setError(errorMessage);
             setLoading(false);
         }
     };
