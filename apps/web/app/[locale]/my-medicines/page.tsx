@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pill, Plus, Bookmark, Trash2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { RequestVerificationModal } from "@/components/RequestVerificationModal";
 import { getApiBaseUrl } from "@/lib/env";
 
 interface TrackedMedicine {
@@ -56,6 +57,14 @@ type FetchStatus = "loading" | "success" | "error";
 export default function MyMedicinesPage() {
     const [medicines, setMedicines] = useState<TrackedMedicine[]>([]);
     const [savedMedicines, setSavedMedicines] = useState<BookmarkedMedicine[]>([]);
+    const [, setError] = useState<string | null>(null);
+    const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+    const [selectedMedicine, setSelectedMedicine] = useState<TrackedMedicine | null>(null);
+
+    const handleUnverifiedClick = (medicine: TrackedMedicine) => {
+        setSelectedMedicine(medicine);
+        setVerificationModalOpen(true);
+    };
     const [status, setStatus] = useState<FetchStatus>("loading");
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -203,12 +212,18 @@ export default function MyMedicinesPage() {
                                                 </Badge>
                                             )}
                                             {m.is_verified === false && (
-                                                <Badge
-                                                    variant="warning"
-                                                    aria-label="Verification status"
+                                                <button
+                                                    onClick={() => handleUnverifiedClick(m)}
+                                                    className="transition-transform hover:scale-105 active:scale-95"
+                                                    title="Click to request verification"
                                                 >
-                                                    ⚠ Unverified
-                                                </Badge>
+                                                    <Badge
+                                                        variant="warning"
+                                                        aria-label="Verification status"
+                                                    >
+                                                        ⚠ Unverified
+                                                    </Badge>
+                                                </button>
                                             )}
                                         </div>
                                     </td>
@@ -261,6 +276,14 @@ export default function MyMedicinesPage() {
                     </div>
                 )}
             </section>
+
+            {selectedMedicine && (
+                <RequestVerificationModal
+                    isOpen={verificationModalOpen}
+                    onClose={() => setVerificationModalOpen(false)}
+                    medicineName={selectedMedicine.medicine_name}
+                />
+            )}
         </div>
     );
 }
