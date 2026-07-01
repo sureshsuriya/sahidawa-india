@@ -163,7 +163,8 @@ async function withRetry<T>(
     operationName: string
 ): Promise<T> {
     const maxRetries = 3;
-    const initialDelay = process.env.NODE_ENV === "test" ? 10 : 1000;
+    const isTest = process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined;
+    const initialDelay = isTest ? 10 : 1000;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
