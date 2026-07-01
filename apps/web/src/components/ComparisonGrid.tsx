@@ -214,7 +214,7 @@ export default function ComparisonGrid({
     medicines: (Medicine | null)[];
     labels?: ComparisonGridLabels;
 }) {
-    const validMedicines = medicines.filter((m): m is Medicine => m !== null);
+    const validMedicines = (medicines || []).filter((m): m is Medicine => m !== null);
 
     if (validMedicines.length === 0) {
         return (
