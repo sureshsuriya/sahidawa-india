@@ -23,6 +23,41 @@ function stopMediaStream(stream: MediaStream | null): void {
 
 const SCANNER_INACTIVITY_TIMEOUT = 45000;
 
+function triggerSuccessFeedback() {
+    try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]);
+        }
+    } catch (e) {
+        console.warn("Vibration feedback failed:", e);
+    }
+
+    try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0, ctx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+            gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.15);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.15);
+        }
+    } catch (e) {
+        console.warn("Audio feedback failed:", e);
+    }
+}
+
 export function BarcodeScanner({
     onScan,
     debounceMs = 2000,
@@ -162,6 +197,7 @@ export function BarcodeScanner({
 
                             const text = result.getText().trim();
                             if (shouldEmitScan(text)) {
+                                triggerSuccessFeedback();
                                 resetInactivityTimer();
                                 onScan(text);
                             }
