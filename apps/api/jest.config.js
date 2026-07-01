@@ -8,6 +8,7 @@ module.exports = {
         "**/src/services/cache.test.ts",
     ],
     clearMocks: true,
+    forceExit: true,
     setupFiles: ["<rootDir>/tests/setup.ts"],
     transform: {
         "^.+\\.tsx?$": [
