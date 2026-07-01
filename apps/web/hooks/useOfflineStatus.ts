@@ -10,6 +10,7 @@ export const useOfflineStatus = () => {
     const [isStatusDirty, setIsStatusDirty] = useState(false);
     const [isTestMode, setIsTestMode] = useState(false);
     const retryCallbacksRef = useRef<Set<() => void>>(new Set());
+    const timeoutRef = useRef<NodeJS.Timeout>();
 
     useEffect(() => {
         // Check if we're in test mode
@@ -38,7 +39,8 @@ export const useOfflineStatus = () => {
                 }
             });
             // Reset dirty flag after a short delay so UI can update
-            setTimeout(() => setIsStatusDirty(false), 1000);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => setIsStatusDirty(false), 1000);
         };
 
         const handleOffline = () => {
@@ -57,6 +59,7 @@ export const useOfflineStatus = () => {
         return () => {
             window.removeEventListener("online", handleOnline);
             window.removeEventListener("offline", handleOffline);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
     }, []);
 

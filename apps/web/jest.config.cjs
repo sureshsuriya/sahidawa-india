@@ -10,8 +10,8 @@ module.exports = {
     setupFiles: ["<rootDir>/jest.env.cjs"],
     roots: ["<rootDir>/tests"],
     testPathIgnorePatterns: ["<rootDir>/tests/e2e/"],
-    forceExit: true,
-    openHandlesTimeout: 2000,
+    workerIdleMemoryLimit: "512MB",
+    workerThreads: true,
     moduleNameMapper: {
         "\\.css$": "<rootDir>/tests/mocks/styleMock.ts",
         "^leaflet$": "<rootDir>/tests/mocks/leaflet.ts",
