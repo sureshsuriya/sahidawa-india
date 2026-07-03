@@ -80,6 +80,33 @@ const registerPharmacySchema = z.object({
     lat: z.number().min(-90).max(90).optional(),
     lng: z.number().min(-180).max(180).optional(),
 });
+// Zod schema for validating pharmacy update payloads (PUT /:id)
+// Mirrors registerPharmacySchema but all fields optional, since a client
+// may only send the fields they want to change.
+const updatePharmacySchema = z
+    .object({
+        name: z.string().min(2).optional(),
+        licenseId: z.string().min(3).optional(),
+        address: z.string().min(5).optional(),
+        district: z.string().min(2).optional(),
+        state: z.string().min(2).optional(),
+        phone_number: z
+            .string()
+            .regex(/^\+?[\d\s\-()]{7,15}$/)
+            .optional(),
+        lat: z.number().min(-90).max(90).optional(),
+        lng: z.number().min(-180).max(180).optional(),
+    })
+    .strict(); // reject unknown keys outright, don't silently drop them
+
+// Admin-only fields — validated and merged in separately, never from a
+// non-admin request body.
+const adminOnlyPharmacyFieldsSchema = z
+    .object({
+        status: z.enum(["pending", "approved", "rejected"]).optional(),
+        is_verified: z.boolean().optional(),
+    })
+    .strict();
 
 // Zod schema for validating each individual item inside an uploaded row
 const inventoryRowSchema = z.object({
@@ -1145,13 +1172,30 @@ router.put(
                 return;
             }
 
-            const updateData = req.body;
-            // Ensure we don't accidentally update restricted fields unless admin
-            delete updateData.id;
-            delete updateData.created_by;
-            if (!isAdmin) {
-                delete updateData.status;
-                delete updateData.is_verified;
+            const parsedBody = updatePharmacySchema.safeParse(req.body);
+            if (!parsedBody.success) {
+                res.status(400).json({
+                    error: "Invalid pharmacy update payload",
+                    issues: parsedBody.error.issues,
+                });
+                return;
+            }
+
+            let updateData: Record<string, unknown> = { ...parsedBody.data };
+
+            if (isAdmin) {
+                const parsedAdminFields = adminOnlyPharmacyFieldsSchema.safeParse({
+                    status: req.body.status,
+                    is_verified: req.body.is_verified,
+                });
+                if (!parsedAdminFields.success) {
+                    res.status(400).json({
+                        error: "Invalid admin fields in pharmacy update payload",
+                        issues: parsedAdminFields.error.issues,
+                    });
+                    return;
+                }
+                updateData = { ...updateData, ...parsedAdminFields.data };
             }
 
             const { data: updatedPharmacy, error: updateError } = await supabase
@@ -1160,7 +1204,6 @@ router.put(
                 .eq("id", pharmacyId)
                 .select()
                 .single();
-
             if (updateError) {
                 logger.error(`Pharmacy update failed: ${updateError.message}`);
                 res.status(500).json({ error: "Database operation failed during update." });
