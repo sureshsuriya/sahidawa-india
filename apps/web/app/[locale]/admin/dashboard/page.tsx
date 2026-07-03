@@ -28,7 +28,7 @@ import { useSession } from "@/src/components/AuthProvider";
 
 type ReportStatus = "pending" | "verified_fake" | "false_alarm";
 type MedicineStatus = "approved" | "recalled" | "banned";
-type Tab = "reports" | "medicine" | "logs";
+type Tab = "reports" | "medicine" | "logs" | "maintenance";
 
 interface Report {
     id: string;
@@ -80,6 +80,7 @@ export default function AdminDashboard() {
     const [acting, setActing] = useState<string | null>(null);
     const [authError, setAuthError] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
+    const [isFlushingInteractions, setIsFlushingInteractions] = useState(false);
     const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
     const [newMed, setNewMed] = useState<Omit<Medicine, "id">>({
         brand_name: "",
@@ -241,6 +242,36 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleFlushInteractions = async () => {
+        if (!canMutate) return;
+        setIsFlushingInteractions(true);
+        try {
+            const res = await fetch(`${ADMIN_API_BASE}/cache/flush-interactions`, {
+                method: "POST",
+                headers: authHeaders(),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to flush cache");
+
+            notify(
+                <>
+                    <CheckCircle className="mr-1 inline h-4 w-4" /> Cleared {data.invalidated} cache
+                    keys!
+                </>
+            );
+        } catch (err: any) {
+            notify(
+                <>
+                    <XCircle className="mr-1 inline h-4 w-4" />{" "}
+                    {err.message || "Cache flush failed"}
+                </>,
+                false
+            );
+        } finally {
+            setIsFlushingInteractions(false);
+        }
+    };
+
     const pendingCount = reports.length;
     const resolvedCount = resolved.length;
     const districtCount = new Set(reports.map((r) => r.district).filter(Boolean)).size;
@@ -275,6 +306,12 @@ export default function AdminDashboard() {
                         label={t("nav.logs")}
                         active={tab === "logs"}
                         onClick={() => setTab("logs")}
+                    />
+                    <NavItem
+                        icon={RefreshCw}
+                        label="System Maintenance"
+                        active={tab === "maintenance"}
+                        onClick={() => setTab("maintenance")}
                     />
                     <Link
                         href="/admin/pharmacies/pending"
@@ -569,6 +606,43 @@ export default function AdminDashboard() {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* System Maintenance Tab */}
+                    {tab === "maintenance" && (
+                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <div className="border-b border-slate-100 px-6 py-4">
+                                <h2 className="font-semibold text-slate-800">System Maintenance</h2>
+                                <p className="mt-0.5 text-xs text-slate-400">
+                                    Administrative tools to manage system health and caches.
+                                </p>
+                            </div>
+                            <div className="p-6">
+                                <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4">
+                                    <div>
+                                        <h3 className="font-semibold text-slate-800">
+                                            Interaction Cache
+                                        </h3>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            Purge old versions of interaction caches from Redis to
+                                            free up memory.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handleFlushInteractions}
+                                        disabled={isFlushingInteractions || !canMutate}
+                                        className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {isFlushingInteractions ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <AlertTriangle className="h-4 w-4" />
+                                        )}
+                                        Flush Interaction Cache
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

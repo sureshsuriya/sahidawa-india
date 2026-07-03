@@ -265,6 +265,49 @@ export async function invalidateDrugCache(drugIds: string[]): Promise<string[]> 
 }
 
 /**
+ * Iterates through Redis and deletes all keys matching the interaction cache prefix.
+ * Uses SCAN to avoid blocking the event loop and deletes in chunks.
+ * Returns the number of keys deleted.
+ */
+export async function flushInteractionCache(): Promise<number> {
+    if (!redisClient.isOpen) return 0;
+    try {
+        let cursor = 0;
+        let totalDeleted = 0;
+        const scanIterator = redisClient.scanIterator({
+            MATCH: "interactions:*",
+            COUNT: 100,
+        });
+
+        let chunk: string[] = [];
+        for await (const key of scanIterator) {
+            if (Array.isArray(key)) {
+                chunk.push(...key);
+            } else {
+                chunk.push(key as any);
+            }
+            if (chunk.length >= CACHE_INVALIDATION_CHUNK_SIZE) {
+                await redisClient.del(chunk as any);
+                totalDeleted += chunk.length;
+                chunk = [];
+            }
+        }
+
+        // Delete any remaining keys in the last chunk
+        if (chunk.length > 0) {
+            await redisClient.del(chunk as any);
+            totalDeleted += chunk.length;
+        }
+
+        logger.info(`Successfully flushed ${totalDeleted} interaction cache keys`);
+        return totalDeleted;
+    } catch (err) {
+        logger.error("Error flushing interaction cache", err);
+        return 0;
+    }
+}
+
+/**
  * Returns cache performance stats: hit/miss counts, tier breakdown, top drugs.
  */
 export async function getCacheStats(): Promise<{
