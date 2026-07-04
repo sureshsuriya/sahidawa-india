@@ -856,3 +856,4 @@
 | [#3005](https://github.com/RatLoopz/sahidawa-india/pull/3005) | 2026-07-03 | Backend | 9 | @Saylee12R | [View Doc](devtrack/2026-07/PR-3005-refactor-remove-any-types-from-pharmacy-bulk-uploa.md) |
 | [#3060](https://github.com/RatLoopz/sahidawa-india/pull/3060) | 2026-07-04 | Backend | 17 | @panditshubham766-dotcom | [View Doc](devtrack/2026-07/PR-3060-fix-security-replace-static-pbkdf2-salt-with-per-k.md) / [ADR](devtrack/adr/ADR-042-fix-security-replace-static-pbkdf2-salt-with-per-k.md) |
 | [#3065](https://github.com/RatLoopz/sahidawa-india/pull/3065) | 2026-07-04 | Backend | 9 | @aayushiii18 | [View Doc](devtrack/2026-07/PR-3065-fix-api-add-zod-schema-validation-to-abha-link-ver.md) |
+| [#3044](https://github.com/RatLoopz/sahidawa-india/pull/3044) | 2026-07-04 | Backend | 13 | @aayushiii18 | [View Doc](devtrack/2026-07/PR-3044-fix-api-validate-pharmacy-update-payload-with-zod-.md) |
