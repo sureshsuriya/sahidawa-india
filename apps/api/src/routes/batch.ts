@@ -380,15 +380,17 @@ router.post("/report", batchLimiter, async (req: Request, res: Response) => {
     const hashedIp = anonymizeIp(req.ip);
 
     const reportPayload = {
-        medicineName: brandName || batchNumber,
-        manufacturer: "",
-        description,
-        pharmacyName: pharmacyName ?? "",
-        address: "",
-        city: city ?? "",
-        state: state ?? "",
-        pincode: pincode ?? "",
-        district: city ?? "",
+    medicineName: brandName || batchNumber,
+    manufacturer: "",
+    description,
+    pharmacyName: pharmacyName ?? "",
+    address: "",
+    city: city ?? "",
+    state: state ?? "",
+    pincode: pincode ?? "",
+    district: city ?? "",
+    batchNumber,
+    scannedBarcode: barcodeId,
     };
 
     const validation = await validateReport(reportPayload, hashedIp, null);

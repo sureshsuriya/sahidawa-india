@@ -18,7 +18,10 @@ export interface ReportPayload {
     state: string;
     pincode: string;
     district: string;
+    batchNumber?: string;
+    scannedBarcode?: string;
 }
+
 
 export interface ValidationResult {
     passed: boolean;
@@ -35,10 +38,11 @@ export function computeReportHash(payload: ReportPayload): string {
         payload.pharmacyName.trim().toLowerCase(),
         payload.city.trim().toLowerCase(),
         payload.pincode.trim(),
+        payload.batchNumber?.trim().toLowerCase() ?? "",
+        payload.scannedBarcode?.trim().toLowerCase() ?? "",
     ].join("|");
     return crypto.createHash("sha256").update(normalized).digest("hex");
 }
-
 export function anonymizeIp(ip: string | undefined): string | undefined {
     if (!ip) return undefined;
     return crypto.createHash("sha256").update(ip).digest("hex");
