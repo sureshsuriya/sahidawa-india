@@ -538,7 +538,7 @@ router.post("/verify-otp", async (req, res) => {
     }
 });
 
-router.patch("/phone", optionalAuth, async (req: AuthenticatedRequest, res) => {
+router.patch("/phone", requireAuth, async (req: AuthenticatedRequest, res) => {
     const parsed = updatePhoneSchema.safeParse(req.body);
     if (!parsed.success) {
         res.status(400).json({ error: "Invalid patch payload", issues: parsed.error.issues });
@@ -574,13 +574,10 @@ router.patch("/phone", optionalAuth, async (req: AuthenticatedRequest, res) => {
                 if (district !== undefined) updateData.district = district;
                 if (is_active !== undefined) updateData.is_active = is_active;
 
-                let query = supabase.from("notification_subscribers").update(updateData);
-
-                if (req.user) {
-                    query = query.eq("user_id", req.user.id);
-                } else {
-                    query = query.eq("phone", formattedPhone);
-                }
+                const query = supabase
+                    .from("notification_subscribers")
+                    .update(updateData)
+                    .eq("user_id", req.user!.id);
 
                 const { data: dbData, error } = await query.select();
                 if (error) {
@@ -610,9 +607,9 @@ router.patch("/phone", optionalAuth, async (req: AuthenticatedRequest, res) => {
 
         if (dbFailed) {
             logger.warn("Supabase database is offline. Updating subscriber in-memory.");
-            let sub = req.user
-                ? Array.from(memorySubscribers.values()).find((s) => s.user_id === req.user!.id)
-                : memorySubscribers.get(formattedPhone);
+            let sub = Array.from(memorySubscribers.values()).find(
+                (s) => s.user_id === req.user!.id
+            );
 
             if (sub) {
                 if (formattedNewPhone) {
