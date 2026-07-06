@@ -8,7 +8,7 @@
  */
 import { enqueueReport } from "@/lib/offline/queue";
 import { handleApiError } from "@/lib/apiErrorHandler";
-import React, { useState, useEffect, useId, useMemo } from "react";
+import React, { useState, useEffect, useId, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useForm, FormProvider, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -951,6 +951,23 @@ export default function ReportWizard() {
         setSubmitting(true);
         setSubmitErr(null);
 
+        // Check for offline state first, before any network requests
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+            try {
+                await geocodePincode(data.pincode).catch(() => null);
+                await enqueueReport({ reportData: data });
+                setQueuedOffline(true);
+                setPendingCount((c) => c + 1);
+                setDone(true);
+            } catch (queueErr) {
+                console.error("Failed to queue report offline:", queueErr);
+                setSubmitErr("You're offline and the report could not be saved locally.");
+            } finally {
+                setSubmitting(false);
+            }
+            return;
+        }
+
         let token: string | undefined = undefined;
         if (supabase) {
             try {
@@ -961,20 +978,21 @@ export default function ReportWizard() {
             } catch {
                 // ignore if supabase is not configured
             }
-
-        if (typeof navigator !== "undefined" && (!navigator.onLine || isNetworkError)) {
-            try {
-                const geo = await geocodePincode(data.pincode).catch(() => null);
-                await enqueueReport({ reportData: data });
-                alert("Report saved locally and will sync when back online!");
-            } catch (queueErr) {
-                console.error("Failed to queue report offline:", queueErr);
-                setSubmitErr("You're offline and the report could not be saved locally.");
-            } finally {
-                setSubmitting(false);
-            }
-            return;
         }
+
+        try {
+            const result = await submitReport(data, token);
+            setReportId(result?.report?.id ?? null);
+            setDone(true);
+            void clearDraft();
+        } catch (err) {
+            const message = await handleApiError(err, "Failed to submit report");
+            setSubmitErr(message ?? "Something went wrong. Please try again.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handleReset = () => {
         images.forEach((i) => URL.revokeObjectURL(i.preview));
         setImages([]);
@@ -1125,10 +1143,15 @@ export default function ReportWizard() {
                                                 <>
                                                     Submit Report <Icon.Send />
                                                 </>
-)}
-            </button>
-        </div>
-    </form>
-</FormProvider>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </form>
+        </FormProvider>
     );
 }

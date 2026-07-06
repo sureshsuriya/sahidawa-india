@@ -232,7 +232,7 @@ alertsRouter.post("/ingest", requireApiKey, limiter, async (req: ApiKeyRequest, 
         }
 
         logger.info("Alerts ingested successfully", {
-            caller: req.apiKey?.callerName,
+            caller: req.apiKey?.userId,
             count: insertedAlerts?.length,
         });
 
@@ -242,7 +242,7 @@ alertsRouter.post("/ingest", requireApiKey, limiter, async (req: ApiKeyRequest, 
             inserted: insertedAlerts?.length,
         });
     } catch (error) {
-        logger.error("Unexpected error in /ingest", { error, caller: req.apiKey?.callerName });
+        logger.error("Unexpected error in /ingest", { error, caller: req.apiKey?.userId });
         res.status(500).json({ error: "Internal server error" });
     }
 });
