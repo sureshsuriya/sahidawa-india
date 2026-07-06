@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import dynamic from "next/dynamic";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -9,16 +10,26 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { OfflineErrorBoundary } from "@/components/OfflineErrorBoundary";
 import { ServiceWorkerProvider } from "@/components/ServiceWorkerProvider";
-import BackToTopButton from "./components/BackToTopButton";
-import Chatbot from "./components/Chatbot";
 import Navbar from "./components/Navbar";
 import "./globals.css";
 import "../../src/styles/print.css";
 import { Toaster } from "sonner";
 import Footer from "./components/Footer";
 import { AuthProvider } from "@/src/components/AuthProvider";
-import CommandPalette from "./components/CommandPalette";
 import { TracingInitializer } from "@/components/TracingInitializer";
+
+const BackToTopButton = dynamic(() => import("./components/BackToTopButton"), {
+    ssr: false,
+    loading: () => null,
+});
+const Chatbot = dynamic(() => import("./components/Chatbot"), {
+    ssr: false,
+    loading: () => null,
+});
+const CommandPalette = dynamic(() => import("./components/CommandPalette"), {
+    ssr: false,
+    loading: () => null,
+});
 
 export async function generateMetadata({
     params,
