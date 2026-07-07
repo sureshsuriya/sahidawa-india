@@ -215,7 +215,7 @@ alertsRouter.post("/ingest", requireApiKey, limiter, async (req: ApiKeyRequest, 
                 );
                 await redisClient.del(keys);
             } catch (err) {
-                console.error("Failed to invalidate cache for alert batches:", err);
+                logger.error({ message: "Failed to invalidate cache for alert batches", error: err });
             }
         }
 
