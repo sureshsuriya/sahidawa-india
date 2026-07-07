@@ -22,6 +22,10 @@ jest.mock("../src/db/client", () => {
 
 import { supabase, dbConfig } from "../src/db/client";
 
+const MED_A_ID = "11111111-1111-4111-8111-111111111111";
+const MED_B_ID = "22222222-2222-4222-8222-222222222222";
+const MED_C_ID = "33333333-3333-4333-8333-333333333333";
+
 describe("GET /api/v1/interactions", () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -30,12 +34,66 @@ describe("GET /api/v1/interactions", () => {
 
     it("returns 400 when fewer than two medicine ids are provided", async () => {
         const missingIds = await request(app).get("/api/v1/interactions");
-        const singleId = await request(app).get("/api/v1/interactions?ids=med-1");
+        const singleId = await request(app).get(`/api/v1/interactions?ids=${MED_A_ID}`);
 
         expect(missingIds.status).toBe(400);
-        expect(missingIds.body.error).toBe("At least two medicine ids are required");
+        expect(missingIds.body.error).toBe("Invalid medicine id list");
         expect(singleId.status).toBe(400);
-        expect(singleId.body.error).toBe("At least two medicine ids are required");
+        expect(singleId.body.error).toBe("Invalid medicine id list");
+        expect(supabase.from).not.toHaveBeenCalled();
+    });
+
+    it("rejects malformed, duplicate, and oversized id lists before querying Supabase", async () => {
+        const malformed = await request(app).get(`/api/v1/interactions?ids=${MED_A_ID},not-a-uuid`);
+        const duplicate = await request(app).get(
+            `/api/v1/interactions?ids=${MED_A_ID},${MED_A_ID}`
+        );
+        const oversizedIds = Array.from(
+            { length: 7 },
+            (_, index) => `${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`
+        ).join(",");
+        const oversized = await request(app).get(`/api/v1/interactions?ids=${oversizedIds}`);
+
+        expect(malformed.status).toBe(400);
+        expect(duplicate.status).toBe(400);
+        expect(oversized.status).toBe(400);
+        expect(malformed.body.error).toBe("Invalid medicine id list");
+        expect(duplicate.body.error).toBe("Invalid medicine id list");
+        expect(oversized.body.error).toBe("Invalid medicine id list");
+        expect(supabase.from).not.toHaveBeenCalled();
+    });
+
+    it("does not reveal whether requested UUIDs exist when fewer than two medicines match", async () => {
+        (supabase.in as jest.Mock).mockResolvedValueOnce({
+            data: [
+                {
+                    id: MED_A_ID,
+                    brand_name: "Crocin",
+                    generic_name: "paracetamol",
+                },
+            ],
+            error: null,
+        });
+
+        const res = await request(app).get(`/api/v1/interactions?ids=${MED_A_ID},${MED_B_ID}`);
+
+        expect(res.status).toBe(200);
+        expect(res.headers["cache-control"]).toBe("public, max-age=60, stale-while-revalidate=300");
+        expect(res.body).toEqual({ interactions: [] });
+        expect(supabase.from).toHaveBeenCalledTimes(1);
+        expect(supabase.from).toHaveBeenCalledWith("medicines");
+    });
+
+    it("returns a safe error message when the interaction lookup fails", async () => {
+        (supabase.in as jest.Mock).mockResolvedValueOnce({
+            data: null,
+            error: new Error("relation medicines does not exist"),
+        });
+
+        const res = await request(app).get(`/api/v1/interactions?ids=${MED_A_ID},${MED_B_ID}`);
+
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual({ error: "Failed to check medicine interactions" });
     });
 
     it("returns pair interaction warnings with High Risk, Moderate, and Safe tags", async () => {
@@ -45,17 +103,17 @@ describe("GET /api/v1/interactions", () => {
             .mockResolvedValueOnce({
                 data: [
                     {
-                        id: "med-a",
+                        id: MED_A_ID,
                         brand_name: "Crocin",
                         generic_name: "paracetamol",
                     },
                     {
-                        id: "med-b",
+                        id: MED_B_ID,
                         brand_name: "Warfarin",
                         generic_name: "warfarin",
                     },
                     {
-                        id: "med-c",
+                        id: MED_C_ID,
                         brand_name: "Brufen",
                         generic_name: "ibuprofen",
                     },
@@ -87,9 +145,12 @@ describe("GET /api/v1/interactions", () => {
                 error: null,
             });
 
-        const res = await request(app).get("/api/v1/interactions?ids=med-a,med-b,med-c");
+        const res = await request(app).get(
+            `/api/v1/interactions?ids=${MED_A_ID},${MED_B_ID},${MED_C_ID}`
+        );
 
         expect(res.status).toBe(200);
+        expect(res.headers["cache-control"]).toBe("public, max-age=60, stale-while-revalidate=300");
         expect(supabase.from).toHaveBeenCalledTimes(2);
         expect(supabase.from).toHaveBeenNthCalledWith(1, "medicines");
         expect(supabase.from).toHaveBeenNthCalledWith(2, "drug_interactions");
@@ -99,8 +160,8 @@ describe("GET /api/v1/interactions", () => {
         expect(supabase.limit).not.toHaveBeenCalled();
         expect(res.body.interactions).toEqual([
             expect.objectContaining({
-                medicineAId: "med-a",
-                medicineBId: "med-b",
+                medicineAId: MED_A_ID,
+                medicineBId: MED_B_ID,
                 drugA: "Crocin",
                 drugB: "Warfarin",
                 severity: "High Risk",
@@ -108,15 +169,15 @@ describe("GET /api/v1/interactions", () => {
                 precautions: "Monitor INR and bleeding symptoms.",
             }),
             expect.objectContaining({
-                medicineAId: "med-a",
-                medicineBId: "med-c",
+                medicineAId: MED_A_ID,
+                medicineBId: MED_C_ID,
                 drugA: "Crocin",
                 drugB: "Brufen",
                 severity: "Safe",
             }),
             expect.objectContaining({
-                medicineAId: "med-b",
-                medicineBId: "med-c",
+                medicineAId: MED_B_ID,
+                medicineBId: MED_C_ID,
                 drugA: "Warfarin",
                 drugB: "Brufen",
                 severity: "Moderate",

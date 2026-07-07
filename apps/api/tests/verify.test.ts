@@ -139,4 +139,28 @@ describe("POST /api/verify", () => {
         expect(res.status).toBe(400);
         expect(res.body.error).toBe("Invalid request body");
     });
+
+    it("should not return mock data in production even when VERIFY_ENABLE_MOCKS is enabled", async () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        const originalVerifyEnableMocks = process.env.VERIFY_ENABLE_MOCKS;
+
+        process.env.NODE_ENV = "production";
+        process.env.VERIFY_ENABLE_MOCKS = "true";
+
+        ((supabase as any).maybeSingle as jest.Mock).mockResolvedValue({
+            data: null,
+            error: null,
+        });
+
+        const res = await request(app).post("/api/verify").set("X-Forwarded-Proto", "https").send({
+            batchNumber: "BN2024001",
+            brandName: "Dolo 650",
+        });
+
+        expect(res.status).toBe(404);
+        expect(res.body.verified).toBe(false);
+
+        process.env.NODE_ENV = originalNodeEnv;
+        process.env.VERIFY_ENABLE_MOCKS = originalVerifyEnableMocks;
+    });
 });

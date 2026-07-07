@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Copy, Loader2, Plus, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +31,66 @@ type InteractionWarning = {
     source?: string;
 };
 
+const INTERACTIONS_CACHE_TTL_MS = 30_000;
+const INTERACTIONS_REQUEST_DEBOUNCE_MS = 150;
+
+const interactionsCache = new Map<
+    string,
+    { expiresAt: number; interactions: InteractionWarning[] }
+>();
+const interactionsInFlight = new Map<string, Promise<InteractionWarning[]>>();
+
+const severityOrder: Record<InteractionSeverity, number> = {
+    "High Risk": 0,
+    Moderate: 1,
+    Safe: 2,
+};
+
+function sortInteractionWarnings(interactions: InteractionWarning[]) {
+    return [...interactions].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+}
+
+async function fetchInteractionWarnings(
+    selectedIdsKey: string,
+    fallbackErrorMessage: string
+): Promise<InteractionWarning[]> {
+    const now = Date.now();
+    const cached = interactionsCache.get(selectedIdsKey);
+    if (cached && cached.expiresAt > now) {
+        return cached.interactions;
+    }
+
+    const inFlight = interactionsInFlight.get(selectedIdsKey);
+    if (inFlight) return inFlight;
+
+    const params = new URLSearchParams({ ids: selectedIdsKey });
+    const request = fetch(`${API_BASE}/api/v1/interactions?${params.toString()}`)
+        .then(async (response) => {
+            if (!response.ok) {
+                const body = (await response.json().catch(() => ({}))) as { error?: string };
+                throw new Error(body.error ?? fallbackErrorMessage);
+            }
+
+            return response.json() as Promise<{ interactions: InteractionWarning[] }>;
+        })
+        .then((body) => {
+            const interactions = sortInteractionWarnings(body.interactions ?? []);
+            interactionsCache.set(selectedIdsKey, {
+                expiresAt: Date.now() + INTERACTIONS_CACHE_TTL_MS,
+                interactions,
+            });
+            return interactions;
+        })
+        .finally(() => {
+            if (interactionsInFlight.get(selectedIdsKey) === request) {
+                interactionsInFlight.delete(selectedIdsKey);
+            }
+        });
+
+    interactionsInFlight.set(selectedIdsKey, request);
+    return request;
+}
+
 async function searchMedicines(query: string): Promise<Medicine[]> {
     const filter = buildMedicineNameSearchFilter(query);
     if (!filter) return [];
@@ -58,6 +118,7 @@ export default function ComparePage() {
     const [interactions, setInteractions] = useState<InteractionWarning[]>([]);
     const [interactionsLoading, setInteractionsLoading] = useState(false);
     const [interactionsError, setInteractionsError] = useState<string | null>(null);
+    const latestInteractionRequest = useRef(0);
 
     const medicine1 = selectedMedicines[0] ?? null;
     const medicine2 = selectedMedicines[1] ?? null;
@@ -126,56 +187,40 @@ export default function ComparePage() {
 
     useEffect(() => {
         if (selectedIds.length < 2) {
+            latestInteractionRequest.current += 1;
             setInteractions([]);
             setInteractionsError(null);
             setInteractionsLoading(false);
             return;
         }
 
-        const controller = new AbortController();
-        const params = new URLSearchParams({ ids: selectedIdsKey });
+        const requestId = latestInteractionRequest.current + 1;
+        latestInteractionRequest.current = requestId;
 
-        setInteractionsLoading(true);
-        setInteractionsError(null);
+        const timeoutId = window.setTimeout(() => {
+            setInteractionsLoading(true);
+            setInteractionsError(null);
 
-        fetch(`${API_BASE}/api/v1/interactions?${params.toString()}`, {
-            signal: controller.signal,
-        })
-            .then(async (response) => {
-                if (!response.ok) {
-                    const body = (await response.json().catch(() => ({}))) as { error?: string };
-                    throw new Error(body.error ?? tInteractions("errorMessage"));
-                }
+            fetchInteractionWarnings(selectedIdsKey, tInteractions("errorMessage"))
+                .then((nextInteractions) => {
+                    if (latestInteractionRequest.current !== requestId) return;
+                    setInteractions(nextInteractions);
+                })
+                .catch((error: unknown) => {
+                    if (latestInteractionRequest.current !== requestId) return;
+                    setInteractions([]);
+                    setInteractionsError(
+                        error instanceof Error ? error.message : tInteractions("errorMessage")
+                    );
+                })
+                .finally(() => {
+                    if (latestInteractionRequest.current === requestId) {
+                        setInteractionsLoading(false);
+                    }
+                });
+        }, INTERACTIONS_REQUEST_DEBOUNCE_MS);
 
-                return response.json() as Promise<{ interactions: InteractionWarning[] }>;
-            })
-            .then((body) => {
-                const severityOrder: Record<InteractionSeverity, number> = {
-                    "High Risk": 0,
-                    Moderate: 1,
-                    Safe: 2,
-                };
-
-                setInteractions(
-                    [...(body.interactions ?? [])].sort(
-                        (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
-                    )
-                );
-            })
-            .catch((error: unknown) => {
-                if (error instanceof DOMException && error.name === "AbortError") return;
-                setInteractions([]);
-                setInteractionsError(
-                    error instanceof Error ? error.message : tInteractions("errorMessage")
-                );
-            })
-            .finally(() => {
-                if (!controller.signal.aborted) {
-                    setInteractionsLoading(false);
-                }
-            });
-
-        return () => controller.abort();
+        return () => window.clearTimeout(timeoutId);
     }, [selectedIds.length, selectedIdsKey]);
 
     const handleCopy = (text: string) => {

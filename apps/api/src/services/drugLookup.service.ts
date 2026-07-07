@@ -127,3 +127,41 @@ export async function lookupDrugByBatch(
     // so the route handler can return a clean 503 instead of a raw 500
     throw new ServiceUnavailableError();
 }
+/**
+ * Pre-warms the cache for a specific medicine data snapshot.
+ * Throws ServiceUnavailableError if the underlying database layer is down.
+ */
+export async function warmCache(batchNumber: string): Promise<void> {
+    try {
+        const { data, error } = await supabase
+            .from("medicines")
+            .select(
+                "id, barcode_id, brand_name, generic_name, manufacturer, batch_number, manufacturing_date, expiry_date, cdsco_approval_status, is_counterfeit_alert, is_cdsco_verified, cdsco_match_score, matched_cdsco_product, matched_cdsco_manufacturer, product_match_score, manufacturer_match_score, manufacturer_id"
+            )
+            .eq("batch_number", batchNumber);
+
+        if (error) {
+            logger.error(
+                `Database connection issue while warming cache for batch: ${batchNumber}`,
+                error
+            );
+            throw new ServiceUnavailableError(
+                "Database layer unreachable during cache warm operations."
+            );
+        }
+
+        if (data && data.length > 0) {
+            for (const item of data) {
+                const compositeKey = `${item.batch_number}|${item.barcode_id || ""}|${item.brand_name || ""}`;
+                await setCachedDrug(item.batch_number, item);
+                await setCachedDrug(compositeKey, item);
+            }
+            logger.info(`Successfully pre-warmed cache maps for batch: ${batchNumber}`);
+        }
+    } catch (err) {
+        if (err instanceof ServiceUnavailableError) throw err;
+
+        logger.error(`Unexpected exception caught during cache pre-warming: ${batchNumber}`, err);
+        throw new ServiceUnavailableError();
+    }
+}

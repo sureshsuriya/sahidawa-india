@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supabase } from "../db/client";
 import { logAdminAction } from "../services/audit.service";
 import { AuthenticatedRequest } from "../middleware/auth";
-import { triggerRecallAlert } from "../services/notifications";
+import { triggerRecallAlert, sendNotificationToUser, buildVerificationReviewPayload } from "../services/notifications";
 import logger from "../utils/logger";
 
 const reportStatusSchema = z
@@ -95,7 +95,7 @@ export const getPendingReports = async (
             },
         });
     } catch (err) {
-        console.error(err);
+        logger.error({ error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -247,7 +247,7 @@ export const updateReportStatus = async (
 
         res.json({ message: "Status updated", report: data });
     } catch (err) {
-        console.error(err);
+        logger.error({ error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -287,7 +287,7 @@ export const getAllMedicines = async (req: AuthenticatedRequest, res: Response):
             },
         });
     } catch (err) {
-        console.error("Error in getAllMedicines:", err);
+        logger.error({ message: "Error in getAllMedicines", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -312,7 +312,7 @@ export const getPendingPharmacies = async (
 
         res.json({ pharmacies: data ?? [] });
     } catch (err) {
-        console.error("Error in getPendingPharmacies:", err);
+        logger.error({ message: "Error in getPendingPharmacies", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -362,7 +362,7 @@ export const updatePharmacyStatus = async (
 
         res.json({ message: "Pharmacy status updated", pharmacy: data });
     } catch (err) {
-        console.error("Error in updatePharmacyStatus:", err);
+        logger.error({ message: "Error in updatePharmacyStatus", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -390,7 +390,7 @@ export const createMedicine = async (req: AuthenticatedRequest, res: Response): 
         await logAdminAction(req.user!.id, "CREATE_MEDICINE", "MEDICINE", data.id, parsed.data);
         res.status(201).json(data);
     } catch (err) {
-        console.error(err);
+        logger.error({ error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -455,7 +455,7 @@ export const getAuditLogs = async (req: AuthenticatedRequest, res: Response): Pr
             },
         });
     } catch (err) {
-        console.error("Error in getAuditLogs:", err);
+        logger.error({ message: "Error in getAuditLogs", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -499,7 +499,7 @@ export const getAllPharmacies = async (req: AuthenticatedRequest, res: Response)
             },
         });
     } catch (err) {
-        console.error("Error in getAllPharmacies:", err);
+        logger.error({ message: "Error in getAllPharmacies", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -521,7 +521,7 @@ export const deletePharmacy = async (req: AuthenticatedRequest, res: Response): 
 
         res.json({ message: "Pharmacy soft-deleted successfully" });
     } catch (err) {
-        console.error("Error in deletePharmacy:", err);
+        logger.error({ message: "Error in deletePharmacy", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -543,7 +543,7 @@ export const restorePharmacy = async (req: AuthenticatedRequest, res: Response):
 
         res.json({ message: "Pharmacy restored successfully" });
     } catch (err) {
-        console.error("Error in restorePharmacy:", err);
+        logger.error({ message: "Error in restorePharmacy", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -595,7 +595,7 @@ export const getPendingVerificationRequests = async (
             },
         });
     } catch (err) {
-        console.error("Error in getPendingVerificationRequests:", err);
+        logger.error({ message: "Error in getPendingVerificationRequests", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -618,7 +618,7 @@ export const reviewVerificationRequest = async (
         // Fetch the request first to get medicine_id
         const { data: request, error: fetchError } = await supabase
             .from("medicine_verification_requests")
-            .select("id, medicine_id, medicine_name")
+            .select("id, medicine_id, medicine_name, submitted_by")
             .eq("id", id)
             .single();
 
@@ -678,9 +678,28 @@ export const reviewVerificationRequest = async (
             }
         );
 
+        // Notify the submitting user (fire-and-log, non-blocking).
+        // A failed push send should NOT turn a successful review into a 500.
+        if (request.submitted_by) {
+            try {
+                const notifyPayload = buildVerificationReviewPayload(
+                    request.medicine_name,
+                    status,
+                    rejection_reason ?? null
+                );
+                await sendNotificationToUser(request.submitted_by, notifyPayload);
+            } catch (notifyErr) {
+                logger.error({
+                    message: "Failed to send verification review notification",
+                    error: notifyErr,
+                    submitted_by: request.submitted_by,
+                });
+            }
+        }
+
         res.json({ message: `Verification request ${status}`, request: updated });
     } catch (err) {
-        console.error("Error in reviewVerificationRequest:", err);
+        logger.error({ message: "Error in reviewVerificationRequest", error: err });
         res.status(500).json({ error: "Internal server error" });
     }
 };

@@ -43,7 +43,7 @@ function SearchSuggestions({
     onDeleteItem,
     query = "",
 }: SearchSuggestionsProps) {
-    const parentRef = useRef<HTMLUListElement>(null);
+    const parentRef = useRef<HTMLDivElement>(null);
 
     function highlightMatch(text: string, query: string) {
         if (!query) return text;
@@ -125,16 +125,14 @@ function SearchSuggestions({
     }
 
     return (
-        <ul
+        <div
             ref={parentRef}
-            id="search-suggestions-listbox"
-            role="listbox"
-            aria-label="Search suggestions"
             className="absolute top-full right-0 left-0 z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60"
         >
             {isHistory ? (
                 <>
-                    {/* Sticky header — outside virtualizer so it's always visible */}
+                    {/* Sticky header — outside the listbox role, since a listbox's
+                        children must be options, not arbitrary wrapper elements. */}
                     <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-2.5 text-[11px] font-bold tracking-wider text-slate-400 uppercase select-none">
                         <span>Recent Searches</span>
                         <button
@@ -150,15 +148,18 @@ function SearchSuggestions({
                         </button>
                     </div>
 
-                    {/* Virtualizer container */}
+                    {/* Listbox: contains only role="option" children */}
                     <div
+                        id="search-suggestions-listbox"
+                        role="listbox"
+                        aria-label="Recent searches"
                         style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
                     >
                         {virtualizer.getVirtualItems().map((virtualItem) => {
                             const item = historyItems[virtualItem.index];
                             const isActive = virtualItem.index === activeIndex;
                             return (
-                                <li
+                                <div
                                     key={`${item.query}-${virtualItem.index}`}
                                     id={`search-suggestion-${virtualItem.index}`}
                                     role="option"
@@ -231,18 +232,23 @@ function SearchSuggestions({
                                             <X size={14} />
                                         </button>
                                     </div>
-                                </li>
+                                </div>
                             );
                         })}
                     </div>
                 </>
             ) : (
-                <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+                <div
+                    id="search-suggestions-listbox"
+                    role="listbox"
+                    aria-label="Search suggestions"
+                    style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
+                >
                     {virtualizer.getVirtualItems().map((virtualItem) => {
                         const suggestion = suggestions[virtualItem.index];
                         const isActive = virtualItem.index === activeIndex;
                         return (
-                            <li
+                            <div
                                 key={`${suggestion}-${virtualItem.index}`}
                                 id={`search-suggestion-${virtualItem.index}`}
                                 role="option"
@@ -274,12 +280,12 @@ function SearchSuggestions({
                                 <span className="truncate">
                                     {highlightMatch(suggestion, query)}
                                 </span>
-                            </li>
+                            </div>
                         );
                     })}
                 </div>
             )}
-        </ul>
+        </div>
     );
 }
 

@@ -12,9 +12,12 @@ import { cacheMiddleware } from "../middleware/cache";
 import multer from "multer";
 import { buildOrConditions } from "../utils/db";
 import Papa from "papaparse";
-import { MAX_BULK_UPLOAD_ITEMS } from "@sahidawa/shared";
+import { MAX_BULK_UPLOAD_ITEMS, MAX_BULK_UPLOAD_FILE_SIZE_BYTES } from "@sahidawa/shared";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BULK_UPLOAD_FILE_SIZE_BYTES },
+});
 
 const router = Router();
 
@@ -1130,14 +1133,11 @@ router.post(
 
             const pharmacy = pharmacies[0];
 
-            // Parse CSV with papaparse — handles quoted fields, embedded commas,
-            // escaped/nested quotes, and inconsistent line endings correctly
-            const parseResult = Papa.parse<Record<string, string>>(fileContent, {
-                header: true,
-                skipEmptyLines: true,
-                transformHeader: (h) => h.trim().toLowerCase(),
-                transform: (v) => v.trim(),
-            });
+            // Incremental parsing using the reusable helper (pharmacyId is already known)
+            const { rowsToInsert, failedRows, totalRows } = await parseCsvIncremental(
+                fileContent,
+                pharmacy.id
+            );
 
             if (totalRows === 0) {
                 res.status(400).json({ error: "The file appears empty or is missing rows." });

@@ -9,6 +9,9 @@ module.exports = {
     ],
     clearMocks: true,
     setupFiles: ["<rootDir>/tests/setup.ts"],
+    moduleNameMapper: {
+        "^@sahidawa/shared$": "<rootDir>/../../packages/shared/src",
+    },
     transform: {
         "^.+\\.tsx?$": [
             "ts-jest",

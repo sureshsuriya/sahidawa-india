@@ -3,11 +3,16 @@ import { z } from "zod";
 import { supabase, dbConfig } from "../db/client";
 import logger from "../utils/logger";
 import { escapePostgrest } from "../utils/db";
+import { uuidSchema } from "../utils/validation";
 import { interactionCheckLimiter } from "../middleware/rateLimit";
 import zlib from "zlib";
 import { MAX_INTERACTION_MEDICINES } from "@sahidawa/shared";
+import { promises as fs } from "fs";
+import path from "path";
 
 const router = Router();
+
+const MAX_COMPARE_INTERACTION_MEDICINES = 6;
 
 type WarningSeverity = "High Risk" | "Moderate" | "Safe";
 
@@ -33,6 +38,14 @@ const checkSchema = z.object({
         ),
 });
 
+const medicineIdsQuerySchema = z
+    .array(uuidSchema)
+    .min(2)
+    .max(MAX_COMPARE_INTERACTION_MEDICINES)
+    .refine((ids) => new Set(ids).size === ids.length, {
+        message: "Medicine ids must be unique",
+    });
+
 export function buildMedicineResolutionFilter(input: string): string {
     const escaped = escapePostgrest(input);
     return `id.eq."${escaped}",brand_name.ilike."%${escaped}%",generic_name.ilike."%${escaped}%"`;
@@ -45,20 +58,27 @@ export function buildInteractionPairFilter(a: string, b: string): string {
 }
 
 // Brand name to generic name static mapping for local offline fallback
-// Compressed as a base64 gzipped JSON to reduce bundle size and memory footprint.
-const GZIPPED_BRAND_MAP_B64 =
-    "H4sIAAAAAAAACm2RSwrDMAxE76K1F920i9xGsZ1UIFtGdlJC6d1Lako+zm7mDZIG9AarYilCBwkVrS8YhMGARU7CDXbCcgkf91vD967ZL1NA9zv8Qh1QKYLZ5IFiTlThXxlwlNOZUT8llcGvdNMGep1aOBOOitBBJnY+4kBrrZ05JZGKysiL9fXs0RvAOFL27iJhSlRE16pFdMZcsNSRvW1Sy6hUniphqQ86gc8X5Fdb2rwBAAA=";
+let lazyBrandMapPromise: Promise<Record<string, string>> | null = null;
 
-let lazyBrandMap: Record<string, string> | null = null;
-
-function getLocalBrandMap(): Record<string, string> {
-    if (!lazyBrandMap) {
-        const buffer = Buffer.from(GZIPPED_BRAND_MAP_B64, "base64");
-        const decompressed = zlib.gunzipSync(buffer).toString("utf-8");
-        lazyBrandMap = JSON.parse(decompressed);
+function getLocalBrandMap(): Promise<Record<string, string>> {
+    if (!lazyBrandMapPromise) {
+        lazyBrandMapPromise = (async () => {
+            try {
+                const filePath = path.join(__dirname, "../../assets/brandMap.json.gz");
+                const buffer = await fs.readFile(filePath);
+                const decompressed = zlib.gunzipSync(buffer).toString("utf-8");
+                return JSON.parse(decompressed);
+            } catch (err) {
+                logger.error("Failed to load local brand map", err);
+                return {};
+            }
+        })();
     }
-    return lazyBrandMap!;
+    return lazyBrandMapPromise;
 }
+
+// Start loading immediately in the background
+void getLocalBrandMap();
 
 // Common clinical drug-drug interactions for offline fallback
 interface LocalInteraction {
@@ -189,16 +209,20 @@ function mapSeverityTag(severity?: string | null): WarningSeverity {
     }
 }
 
-function parseIdsParam(ids: unknown): string[] {
+function parseIdsParam(ids: unknown): { success: true; ids: string[] } | { success: false } {
     const raw = Array.isArray(ids) ? ids.join(",") : typeof ids === "string" ? ids : "";
-    return Array.from(
-        new Set(
-            raw
-                .split(",")
-                .map((id) => id.trim())
-                .filter(Boolean)
-        )
+    const parsed = medicineIdsQuerySchema.safeParse(
+        raw
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean)
     );
+
+    if (!parsed.success) {
+        return { success: false };
+    }
+
+    return { success: true, ids: parsed.data };
 }
 
 function getErrorMessage(error: unknown): string {
@@ -233,11 +257,14 @@ function indexInteractions(interactions: InteractionRecord[]): Map<string, Inter
     return byPair;
 }
 
-function getLocalInteractionsForGenerics(genericNames: string[]): InteractionRecord[] {
+async function getLocalInteractionsForGenerics(
+    genericNames: string[]
+): Promise<InteractionRecord[]> {
+    const brandMap = await getLocalBrandMap();
     const selectedGenerics = new Set(
         genericNames.map((name) => {
             const normalized = normalizeGenericName(name);
-            return getLocalBrandMap()[normalized] ?? normalized;
+            return brandMap[normalized] ?? normalized;
         })
     );
 
@@ -250,7 +277,7 @@ function getLocalInteractionsForGenerics(genericNames: string[]): InteractionRec
 
 async function loadInteractionsForGenerics(genericNames: string[]): Promise<InteractionRecord[]> {
     if (dbConfig?.isSupabaseOffline) {
-        return getLocalInteractionsForGenerics(genericNames);
+        return await getLocalInteractionsForGenerics(genericNames);
     }
 
     let dbFailed = false;
@@ -277,7 +304,7 @@ async function loadInteractionsForGenerics(genericNames: string[]): Promise<Inte
         }
     }
 
-    return dbFailed ? getLocalInteractionsForGenerics(genericNames) : [];
+    return dbFailed ? await getLocalInteractionsForGenerics(genericNames) : [];
 }
 
 /**
@@ -293,22 +320,18 @@ async function loadInteractionsForGenerics(genericNames: string[]): Promise<Inte
  *         required: true
  *         schema:
  *           type: string
- *         example: med-a,med-b,med-c
+ *           description: Comma-separated UUID medicine IDs. Maximum 6 IDs.
+ *         example: 11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222
  */
 router.get("/", interactionCheckLimiter, async (req: Request, res: Response) => {
-    const ids = parseIdsParam(req.query.ids);
+    const parsedIds = parseIdsParam(req.query.ids);
 
-    if (ids.length < 2) {
-        res.status(400).json({ error: "At least two medicine ids are required" });
+    if (!parsedIds.success) {
+        res.status(400).json({ error: "Invalid medicine id list" });
         return;
     }
 
-    if (ids.length > MAX_INTERACTION_MEDICINES) {
-        res.status(400).json({
-            error: `At most ${MAX_INTERACTION_MEDICINES} medicine ids are allowed`,
-        });
-        return;
-    }
+    const { ids } = parsedIds;
 
     try {
         const { data, error } = await supabase
@@ -330,7 +353,8 @@ router.get("/", interactionCheckLimiter, async (req: Request, res: Response) => 
             .filter((medicine): medicine is MedicineLookup => medicine != null);
 
         if (medicines.length < 2) {
-            res.status(400).json({ error: "At least two valid medicines are required" });
+            res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+            res.status(200).json({ interactions: [] });
             return;
         }
 
@@ -380,11 +404,12 @@ router.get("/", interactionCheckLimiter, async (req: Request, res: Response) => 
             }
         }
 
+        res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
         res.status(200).json({ interactions });
     } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         logger.error(`Error checking interaction ids: ${msg}`);
-        res.status(500).json({ error: "Failed to check medicine interactions", details: msg });
+        res.status(500).json({ error: "Failed to check medicine interactions" });
     }
 });
 
@@ -459,10 +484,11 @@ async function resolveMedicinesToGenerics(
     }
 
     if (dbFailed) {
+        const brandMap = await getLocalBrandMap();
         // Fallback to local static map for all inputs
         for (const input of cleanInputs) {
             const normalizedForOffline = normalizeOfflineBrandName(input);
-            const mapped = getLocalBrandMap()[normalizedForOffline];
+            const mapped = brandMap[normalizedForOffline];
             if (mapped) {
                 resultsMap.set(input.toLowerCase(), mapped);
             }
@@ -606,7 +632,7 @@ router.post("/check", interactionCheckLimiter, async (req: Request, res: Respons
     } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         logger.error(`Error checking drug interactions: ${msg}`);
-        res.status(500).json({ error: "Failed to check drug interactions", details: msg });
+        res.status(500).json({ error: "Failed to check drug interactions" });
     }
 });
 
