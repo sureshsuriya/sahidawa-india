@@ -10,6 +10,8 @@ import { MAX_INTERACTION_MEDICINES } from "@sahidawa/shared";
 
 const router = Router();
 
+const MAX_COMPARE_INTERACTION_MEDICINES = 6;
+
 type WarningSeverity = "High Risk" | "Moderate" | "Safe";
 
 interface MedicineLookup {
@@ -37,7 +39,7 @@ const checkSchema = z.object({
 const medicineIdsQuerySchema = z
     .array(uuidSchema)
     .min(2)
-    .max(MAX_INTERACTION_MEDICINES)
+    .max(MAX_COMPARE_INTERACTION_MEDICINES)
     .refine((ids) => new Set(ids).size === ids.length, {
         message: "Medicine ids must be unique",
     });
@@ -306,7 +308,8 @@ async function loadInteractionsForGenerics(genericNames: string[]): Promise<Inte
  *         required: true
  *         schema:
  *           type: string
- *         example: med-a,med-b,med-c
+ *           description: Comma-separated UUID medicine IDs. Maximum 6 IDs.
+ *         example: 11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222
  */
 router.get("/", interactionCheckLimiter, async (req: Request, res: Response) => {
     const parsedIds = parseIdsParam(req.query.ids);

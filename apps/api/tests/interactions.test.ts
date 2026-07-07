@@ -49,7 +49,7 @@ describe("GET /api/v1/interactions", () => {
             `/api/v1/interactions?ids=${MED_A_ID},${MED_A_ID}`
         );
         const oversizedIds = Array.from(
-            { length: 51 },
+            { length: 7 },
             (_, index) => `${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000000`
         ).join(",");
         const oversized = await request(app).get(`/api/v1/interactions?ids=${oversizedIds}`);
