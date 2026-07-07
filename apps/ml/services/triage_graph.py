@@ -1,11 +1,68 @@
 import os
+import json
+import asyncio
 import logging
-from typing import List, Dict, Any, TypedDict
+from typing import List, Dict, Any, Optional, TypedDict
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from services.retrieval import retrieve_relevant_medicines
+from utils.database import redis_client
 
 load_dotenv()
+
+# ── Session Persistence (Redis) ──────────────────────────────────────────────
+# Persists non-message triage state (language, collected symptom info,
+# emergency flag, retrieved medicines) across turns of the same conversation,
+# keyed by a client-supplied session_id. Sessions expire automatically after
+# SESSION_TTL_SECONDS so we don't need a separate cleanup job.
+
+SESSION_TTL_SECONDS = 30 * 60  # 30 minutes, per acceptance criteria
+SESSION_KEY_PREFIX = "triage_session:"
+
+# Fields carried over between turns for the same session_id. "messages" is
+# deliberately excluded — the caller is expected to keep sending the message
+# history, so we only rehydrate the derived/extracted state here.
+_PERSISTED_STATE_FIELDS = (
+    "language",
+    "emergency_detected",
+    "collected_info",
+    "retrieved_medicines",
+)
+
+
+def _session_key(session_id: str) -> str:
+    return f"{SESSION_KEY_PREFIX}{session_id}"
+
+
+async def _load_session_state(session_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch previously persisted triage state for a session_id, if any."""
+    try:
+        raw = await redis_client.get(_session_key(session_id))
+    except Exception:
+        logging.exception("Failed to load triage session '%s' from Redis.", session_id)
+        return None
+
+    if not raw:
+        return None
+
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        logging.warning("Corrupt triage session state for '%s'; starting fresh.", session_id)
+        return None
+
+
+async def _save_session_state(session_id: str, state: Dict[str, Any]) -> None:
+    """Persist the relevant subset of triage state for session_id with a TTL."""
+    to_store = {field: state.get(field) for field in _PERSISTED_STATE_FIELDS}
+    try:
+        await redis_client.set(
+            _session_key(session_id),
+            json.dumps(to_store),
+            ex=SESSION_TTL_SECONDS,
+        )
+    except Exception:
+        logging.exception("Failed to save triage session '%s' to Redis.", session_id)
 
 # Check if LangChain and LangGraph are available
 try:
@@ -424,9 +481,19 @@ def build_triage_graph():
 # Instantiated compiled graph
 triage_app = build_triage_graph() if LANGGRAPH_AVAILABLE else None
 
-def run_triage_flow(messages: List[Dict[str, str]], locale: str = "en") -> Dict[str, Any]:
+def run_triage_flow(
+    messages: List[Dict[str, str]],
+    locale: str = "en",
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Interface function to run the compiled LangGraph triage workflow.
+
+    If session_id is provided, previously persisted triage state (language,
+    collected symptom info, emergency flag, retrieved medicines) is loaded
+    from Redis and used as the starting point, so multi-turn conversations
+    don't lose context between requests. Missing or expired sessions simply
+    fall back to a fresh state instead of raising an error.
     """
     if not LANGGRAPH_AVAILABLE or triage_app is None:
         logging.warning("LangGraph is unavailable. Returning mock triage response.")
@@ -437,7 +504,15 @@ def run_triage_flow(messages: List[Dict[str, str]], locale: str = "en") -> Dict[
             "language": "English",
             "details": {}
         }
-        
+
+    persisted_state = None
+    if session_id:
+        try:
+            persisted_state = asyncio.run(_load_session_state(session_id))
+        except Exception:
+            logging.exception("Unexpected error loading session '%s'; starting fresh.", session_id)
+            persisted_state = None
+
     initial_state = {
         "messages": messages,
         "language": "English",
@@ -450,9 +525,20 @@ def run_triage_flow(messages: List[Dict[str, str]], locale: str = "en") -> Dict[
         "disclaimer": "",
         "response": ""
     }
-    
+
+    if persisted_state:
+        initial_state.update(persisted_state)
+        initial_state["messages"] = messages  # always use this request's messages
+
     try:
         final_state = triage_app.invoke(initial_state)
+
+        if session_id:
+            try:
+                asyncio.run(_save_session_state(session_id, final_state))
+            except Exception:
+                logging.exception("Unexpected error saving session '%s'.", session_id)
+
         return {
             "response": final_state.get("response", ""),
             "emergency": final_state.get("emergency_detected", False),

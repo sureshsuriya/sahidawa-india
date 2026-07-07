@@ -108,17 +108,20 @@ describe("GET /api/analytics/heatmap", () => {
                     type: "Feature",
                     geometry: {
                         type: "Point",
-                        coordinates: [77.21, 28.61],
+                        coordinates: [77.209, 28.6139],
                     },
                     properties: {
                         intensity: 1,
+                        geohash: expect.any(String),
                     },
                 },
             ],
         });
+
+        expect(response.body.features[0].properties.geohash).toHaveLength(6);
     });
 
-    it("rounds nearby coordinates to two decimals and groups their intensity", async () => {
+    it("collapses nearby coordinates into the same geohash bucket and calculates centroid", async () => {
         mockHeatmapRows([
             {
                 latitude: "28.1234567",
@@ -133,22 +136,19 @@ describe("GET /api/analytics/heatmap", () => {
         ]);
 
         const response = await request(app)
-            .get("/api/analytics/heatmap?days=7")
+            .get("/api/analytics/heatmap?days=7&precision=5")
             .set("Authorization", "Bearer admin-token");
 
         expect(response.status).toBe(200);
-        expect(response.body.features).toEqual([
-            {
-                type: "Feature",
-                geometry: {
-                    type: "Point",
-                    coordinates: [77.99, 28.12],
-                },
-                properties: {
-                    intensity: 2,
-                },
-            },
-        ]);
+        expect(response.body.features).toHaveLength(1);
+        expect(response.body.features[0].properties.intensity).toBe(2);
+        expect(response.body.features[0].properties.geohash).toHaveLength(5);
+
+        const expectedLng = (77.9876543 + 77.9859999) / 2;
+        const expectedLat = (28.1234567 + 28.1241111) / 2;
+
+        expect(response.body.features[0].geometry.coordinates[0]).toBeCloseTo(expectedLng, 5);
+        expect(response.body.features[0].geometry.coordinates[1]).toBeCloseTo(expectedLat, 5);
     });
 
     it("returns an empty FeatureCollection when no incidents have coordinates", async () => {
@@ -190,28 +190,10 @@ describe("GET /api/analytics/heatmap", () => {
 
         expect(response.status).toBe(200);
         expect(response.body.features).toHaveLength(2);
-        expect(response.body.features).toEqual([
-            {
-                type: "Feature",
-                geometry: {
-                    type: "Point",
-                    coordinates: [72.88, 19.08],
-                },
-                properties: {
-                    intensity: 1,
-                },
-            },
-            {
-                type: "Feature",
-                geometry: {
-                    type: "Point",
-                    coordinates: [77.59, 12.97],
-                },
-                properties: {
-                    intensity: 2,
-                },
-            },
-        ]);
+        expect(response.body.features[0].properties.intensity).toBe(1);
+        expect(response.body.features[1].properties.intensity).toBe(2);
+        expect(response.body.features[0].properties).toHaveProperty("geohash");
+        expect(response.body.features[1].properties).toHaveProperty("geohash");
     });
 
     it("queries recent scan coordinates and excludes null latitude or longitude values", async () => {

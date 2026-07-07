@@ -2,7 +2,12 @@
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Helpful matchers
+import "fake-indexeddb/auto";
 import "@testing-library/jest-dom";
+
+if (!(globalThis as any).structuredClone) {
+    (globalThis as any).structuredClone = (value: any) => JSON.parse(JSON.stringify(value));
+}
 
 // Minimal OffscreenCanvas mock used by image processing code
 if (!(globalThis as any).OffscreenCanvas) {
@@ -13,7 +18,7 @@ if (!(globalThis as any).OffscreenCanvas) {
             this.width = w;
             this.height = h;
         }
-        getContext() {
+        getContext(_type?: string) {
             return {
                 filter: "",
                 drawImage: () => {},
@@ -47,8 +52,8 @@ if (!(globalThis as any).Worker) {
     class WorkerMock {
         onmessage: ((ev: any) => void) | null = null;
         onerror: ((ev: any) => void) | null = null;
-        constructor() {}
-        postMessage() {}
+        constructor(_script?: string) {}
+        postMessage(_msg?: any) {}
         terminate() {}
         addEventListener() {}
         removeEventListener() {}
