@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
 import asyncio
+import uuid
 
 
 from starlette.concurrency import run_in_threadpool
@@ -25,6 +26,12 @@ class ChatMessage(BaseModel):
 class TriageRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., max_length=50, description="The history of chat messages in the session.")
     locale: Optional[str] = Field("en", description="The preferred language/locale code.")
+    session_id: Optional[str] = Field(
+        None,
+        description="Session ID to persist triage state across multiple turns of the "
+        "same conversation. Omit on the first request to start a new session; "
+        "the response will include a session_id to reuse on subsequent requests.",
+    )
 
 class TriageResponse(BaseModel):
     response: str = Field(
@@ -48,6 +55,11 @@ class TriageResponse(BaseModel):
     details: Optional[Dict[str, Any]] = Field(
         {},
         description="Extracted symptom details (onset, severity, location, etc.).",
+    )
+    session_id: str = Field(
+        ...,
+        description="Session ID for this triage conversation. Pass this back in "
+        "subsequent requests to preserve context across turns.",
     )
 
 
@@ -78,10 +90,19 @@ async def triage_chat(payload: TriageRequest):
             detail="Triage service is at maximum capacity. Please try again shortly.",
         )
 
+    # Generate a new session_id if the client didn't supply one (first message
+    # of a new conversation), or reuse theirs to resume an existing session.
+    session_id = payload.session_id or str(uuid.uuid4())
+
     async with _triage_semaphore:
         try:
-            logging.info(f"Invoking triage flow for chat of length {len(messages_list)}")
-            result = await run_in_threadpool(run_triage_flow, messages_list, locale=payload.locale)
+            logging.info(
+                f"Invoking triage flow for chat of length {len(messages_list)} "
+                f"(session_id={session_id})"
+            )
+            result = await run_in_threadpool(
+                run_triage_flow, messages_list, locale=payload.locale, session_id=session_id
+            )
             return TriageResponse(
                 response=result.get("response", ""),
                 emergency=result.get("emergency", False),
@@ -89,7 +110,8 @@ async def triage_chat(payload: TriageRequest):
                 summary=result.get("summary", ""),
                 recommendations=result.get("recommendations", []),
                 disclaimer=result.get("disclaimer", ""),
-                details=result.get("details", {})
+                details=result.get("details", {}),
+                session_id=session_id,
             )
         except Exception as e:
             logging.error(f"Error in triage_chat route execution: {e}")
