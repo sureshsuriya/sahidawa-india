@@ -32,6 +32,12 @@ describe("GET /api/v1/interactions", () => {
         dbConfig.isSupabaseOffline = false;
     });
 
+    it("should return Cache-Control header", async () => {
+        const response = await request(app).get("/api/v1/interactions?ids=med-1");
+
+        expect(response.headers["cache-control"]).toContain("public");
+    });
+
     it("returns 400 when fewer than two medicine ids are provided", async () => {
         const missingIds = await request(app).get("/api/v1/interactions");
         const singleId = await request(app).get(`/api/v1/interactions?ids=${MED_A_ID}`);

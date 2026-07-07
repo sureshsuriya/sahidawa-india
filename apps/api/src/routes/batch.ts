@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { supabase } from "../db/client";
 import { batchLimiter } from "../middleware/rateLimit";
+import { cacheMiddleware } from "../middleware/cache";
 import logger from "../utils/logger";
 import {
     validateReport,
@@ -101,223 +102,230 @@ const reportBatchSchema = z
  *       500:
  *         description: Database error
  */
-router.get("/:batchNumber", batchLimiter, async (req: Request, res: Response) => {
-    const parsed = batchParamSchema.safeParse({ batchNumber: req.params.batchNumber });
+router.get(
+    "/:batchNumber",
+    batchLimiter,
+    cacheMiddleware(120, 300),
+    async (req: Request, res: Response) => {
+        const parsed = batchParamSchema.safeParse({ batchNumber: req.params.batchNumber });
 
-    if (!parsed.success) {
-        res.status(400).json({
-            error: "Invalid batch number",
-            details: parsed.error.issues,
-        });
-        return;
-    }
+        if (!parsed.success) {
+            res.status(400).json({
+                error: "Invalid batch number",
+                details: parsed.error.issues,
+            });
+            return;
+        }
 
-    const { batchNumber } = parsed.data;
+        const { batchNumber } = parsed.data;
 
-    try {
-        // ── Single query with joins (fixes N+1) ───────────────────────────────
-        const { data: batchData, error: batchError } = await supabase
-            .from("batches")
-            .select(
-                `
+        try {
+            // ── Single query with joins (fixes N+1) ───────────────────────────────
+            const { data: batchData, error: batchError } = await supabase
+                .from("batches")
+                .select(
+                    `
                 *,
                 medicine:medicines(id, brand_name, generic_name, cdsco_approval_status, is_counterfeit_alert, is_cdsco_verified, cdsco_match_score, matched_cdsco_product, matched_cdsco_manufacturer, product_match_score, manufacturer_match_score),
                 manufacturer:manufacturers(*)
             `
-            )
-            .eq("batch_number", batchNumber)
-            .maybeSingle();
-
-        if (batchError) {
-            logger.error({
-                message: "Batch lookup failed",
-                error: batchError,
-                route: "/api/verify/batch",
-            });
-            res.status(500).json({ error: "Database lookup failed" });
-            return;
-        }
-
-        // ── Fall back to medicines table if no dedicated batch record ─────────
-        if (!batchData) {
-            const { brandName, barcodeId } = req.query as {
-                brandName?: string;
-                barcodeId?: string;
-            };
-
-            if (!brandName && !barcodeId) {
-                res.status(400).json({
-                    error: "Missing required composite identifier (brandName or barcodeId query parameter)",
-                });
-                return;
-            }
-
-            let query = supabase
-                .from("medicines")
-                .select(
-                    "id, brand_name, generic_name, manufacturer, batch_number, manufacturing_date, expiry_date, cdsco_approval_status, is_counterfeit_alert, is_cdsco_verified, cdsco_match_score, matched_cdsco_product, matched_cdsco_manufacturer, product_match_score, manufacturer_match_score, manufacturer_id"
                 )
-                .eq("batch_number", batchNumber);
+                .eq("batch_number", batchNumber)
+                .maybeSingle();
 
-            if (barcodeId) {
-                query = query.eq("barcode_id", barcodeId);
-            } else if (brandName) {
-                query = query.eq("brand_name", brandName);
-            }
-
-            const { data: medicineData, error: medicineError } = await query.limit(1).maybeSingle();
-
-            if (medicineError) {
+            if (batchError) {
                 logger.error({
-                    message: "Medicine fallback lookup failed",
-                    error: medicineError,
+                    message: "Batch lookup failed",
+                    error: batchError,
                     route: "/api/verify/batch",
                 });
                 res.status(500).json({ error: "Database lookup failed" });
                 return;
             }
 
-            if (!medicineData) {
-                res.status(404).json({
-                    found: false,
-                    message: "No batch or medicine record found for this batch number.",
+            // ── Fall back to medicines table if no dedicated batch record ─────────
+            if (!batchData) {
+                const { brandName, barcodeId } = req.query as {
+                    brandName?: string;
+                    barcodeId?: string;
+                };
+
+                if (!brandName && !barcodeId) {
+                    res.status(400).json({
+                        error: "Missing required composite identifier (brandName or barcodeId query parameter)",
+                    });
+                    return;
+                }
+
+                let query = supabase
+                    .from("medicines")
+                    .select(
+                        "id, brand_name, generic_name, manufacturer, batch_number, manufacturing_date, expiry_date, cdsco_approval_status, is_counterfeit_alert, is_cdsco_verified, cdsco_match_score, matched_cdsco_product, matched_cdsco_manufacturer, product_match_score, manufacturer_match_score, manufacturer_id"
+                    )
+                    .eq("batch_number", batchNumber);
+
+                if (barcodeId) {
+                    query = query.eq("barcode_id", barcodeId);
+                } else if (brandName) {
+                    query = query.eq("brand_name", brandName);
+                }
+
+                const { data: medicineData, error: medicineError } = await query
+                    .limit(1)
+                    .maybeSingle();
+
+                if (medicineError) {
+                    logger.error({
+                        message: "Medicine fallback lookup failed",
+                        error: medicineError,
+                        route: "/api/verify/batch",
+                    });
+                    res.status(500).json({ error: "Database lookup failed" });
+                    return;
+                }
+
+                if (!medicineData) {
+                    res.status(404).json({
+                        found: false,
+                        message: "No batch or medicine record found for this batch number.",
+                    });
+                    return;
+                }
+
+                // Fetch manufacturer if linked — single query
+                let manufacturerData = null;
+                if (medicineData.manufacturer_id) {
+                    const { data: mfr } = await supabase
+                        .from("manufacturers")
+                        .select("*")
+                        .eq("id", medicineData.manufacturer_id)
+                        .maybeSingle();
+                    manufacturerData = mfr;
+                }
+
+                res.status(200).json({
+                    found: true,
+                    source: "medicines",
+                    batch: {
+                        batch_number: medicineData.batch_number,
+                        manufacturing_date: medicineData.manufacturing_date ?? null,
+                        expiry_date: medicineData.expiry_date ?? null,
+                        recall_status: "none",
+                        recall_reason: null,
+                    },
+                    medicine: {
+                        id: medicineData.id,
+                        brand_name: medicineData.brand_name,
+                        generic_name: medicineData.generic_name,
+                        cdsco_approval_status: medicineData.cdsco_approval_status,
+                        is_counterfeit_alert: medicineData.is_counterfeit_alert,
+                        is_cdsco_verified: medicineData.is_cdsco_verified,
+                        cdsco_match_score: medicineData.cdsco_match_score,
+                        matched_cdsco_product: medicineData.matched_cdsco_product,
+                        matched_cdsco_manufacturer: medicineData.matched_cdsco_manufacturer,
+                        product_match_score: medicineData.product_match_score,
+                        manufacturer_match_score: medicineData.manufacturer_match_score,
+                    },
+                    manufacturer: manufacturerData
+                        ? {
+                              name: manufacturerData.name,
+                              license_number: manufacturerData.license_number,
+                              address: manufacturerData.address,
+                              city: manufacturerData.city,
+                              state: manufacturerData.state,
+                              pincode: manufacturerData.pincode,
+                              phone: manufacturerData.phone,
+                              email: manufacturerData.email,
+                              website: manufacturerData.website,
+                              gmp_certified: manufacturerData.gmp_certified,
+                              coordinates: manufacturerData.location
+                                  ? {
+                                        lat: manufacturerData.location.coordinates?.[1],
+                                        lng: manufacturerData.location.coordinates?.[0],
+                                    }
+                                  : null,
+                          }
+                        : {
+                              name: medicineData.manufacturer,
+                              license_number: null,
+                              address: null,
+                              city: null,
+                              state: null,
+                              pincode: null,
+                              phone: null,
+                              email: null,
+                              website: null,
+                              gmp_certified: false,
+                              coordinates: null,
+                          },
+                    expiry_status: getExpiryStatus(medicineData.expiry_date),
                 });
                 return;
             }
 
-            // Fetch manufacturer if linked — single query
-            let manufacturerData = null;
-            if (medicineData.manufacturer_id) {
-                const { data: mfr } = await supabase
-                    .from("manufacturers")
-                    .select("*")
-                    .eq("id", medicineData.manufacturer_id)
-                    .maybeSingle();
-                manufacturerData = mfr;
-            }
+            // ── Batch found with joined data ──────────────────────────────────────
+            const medicine = batchData.medicine as any;
+            const manufacturer = batchData.manufacturer as any;
 
             res.status(200).json({
                 found: true,
-                source: "medicines",
+                source: "batches",
                 batch: {
-                    batch_number: medicineData.batch_number,
-                    manufacturing_date: medicineData.manufacturing_date ?? null,
-                    expiry_date: medicineData.expiry_date ?? null,
-                    recall_status: "none",
-                    recall_reason: null,
+                    batch_number: batchData.batch_number,
+                    manufacturing_date: batchData.manufacturing_date,
+                    expiry_date: batchData.expiry_date,
+                    recall_status: batchData.recall_status,
+                    recall_reason: batchData.recall_reason,
+                    quantity_produced: batchData.quantity_produced,
                 },
-                medicine: {
-                    id: medicineData.id,
-                    brand_name: medicineData.brand_name,
-                    generic_name: medicineData.generic_name,
-                    cdsco_approval_status: medicineData.cdsco_approval_status,
-                    is_counterfeit_alert: medicineData.is_counterfeit_alert,
-                    is_cdsco_verified: medicineData.is_cdsco_verified,
-                    cdsco_match_score: medicineData.cdsco_match_score,
-                    matched_cdsco_product: medicineData.matched_cdsco_product,
-                    matched_cdsco_manufacturer: medicineData.matched_cdsco_manufacturer,
-                    product_match_score: medicineData.product_match_score,
-                    manufacturer_match_score: medicineData.manufacturer_match_score,
-                },
-                manufacturer: manufacturerData
+                medicine: medicine
                     ? {
-                          name: manufacturerData.name,
-                          license_number: manufacturerData.license_number,
-                          address: manufacturerData.address,
-                          city: manufacturerData.city,
-                          state: manufacturerData.state,
-                          pincode: manufacturerData.pincode,
-                          phone: manufacturerData.phone,
-                          email: manufacturerData.email,
-                          website: manufacturerData.website,
-                          gmp_certified: manufacturerData.gmp_certified,
-                          coordinates: manufacturerData.location
+                          id: medicine.id,
+                          brand_name: medicine.brand_name,
+                          generic_name: medicine.generic_name,
+                          cdsco_approval_status: medicine.cdsco_approval_status,
+                          is_counterfeit_alert: medicine.is_counterfeit_alert,
+                          is_cdsco_verified: medicine.is_cdsco_verified,
+                          cdsco_match_score: medicine.cdsco_match_score,
+                          matched_cdsco_product: medicine.matched_cdsco_product,
+                          matched_cdsco_manufacturer: medicine.matched_cdsco_manufacturer,
+                          product_match_score: medicine.product_match_score,
+                          manufacturer_match_score: medicine.manufacturer_match_score,
+                      }
+                    : null,
+                manufacturer: manufacturer
+                    ? {
+                          name: manufacturer.name,
+                          license_number: manufacturer.license_number,
+                          address: manufacturer.address,
+                          city: manufacturer.city,
+                          state: manufacturer.state,
+                          pincode: manufacturer.pincode,
+                          phone: manufacturer.phone,
+                          email: manufacturer.email,
+                          website: manufacturer.website,
+                          gmp_certified: manufacturer.gmp_certified,
+                          coordinates: manufacturer.location
                               ? {
-                                    lat: manufacturerData.location.coordinates?.[1],
-                                    lng: manufacturerData.location.coordinates?.[0],
+                                    lat: manufacturer.location.coordinates?.[1],
+                                    lng: manufacturer.location.coordinates?.[0],
                                 }
                               : null,
                       }
-                    : {
-                          name: medicineData.manufacturer,
-                          license_number: null,
-                          address: null,
-                          city: null,
-                          state: null,
-                          pincode: null,
-                          phone: null,
-                          email: null,
-                          website: null,
-                          gmp_certified: false,
-                          coordinates: null,
-                      },
-                expiry_status: getExpiryStatus(medicineData.expiry_date),
+                    : null,
+                expiry_status: getExpiryStatus(batchData.expiry_date),
             });
-            return;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Unknown error";
+            logger.error({
+                message: "Batch traceability error",
+                error: message,
+                route: "/api/verify/batch",
+            });
+            res.status(500).json({ error: "Internal server error" });
         }
-
-        // ── Batch found with joined data ──────────────────────────────────────
-        const medicine = batchData.medicine as any;
-        const manufacturer = batchData.manufacturer as any;
-
-        res.status(200).json({
-            found: true,
-            source: "batches",
-            batch: {
-                batch_number: batchData.batch_number,
-                manufacturing_date: batchData.manufacturing_date,
-                expiry_date: batchData.expiry_date,
-                recall_status: batchData.recall_status,
-                recall_reason: batchData.recall_reason,
-                quantity_produced: batchData.quantity_produced,
-            },
-            medicine: medicine
-                ? {
-                      id: medicine.id,
-                      brand_name: medicine.brand_name,
-                      generic_name: medicine.generic_name,
-                      cdsco_approval_status: medicine.cdsco_approval_status,
-                      is_counterfeit_alert: medicine.is_counterfeit_alert,
-                      is_cdsco_verified: medicine.is_cdsco_verified,
-                      cdsco_match_score: medicine.cdsco_match_score,
-                      matched_cdsco_product: medicine.matched_cdsco_product,
-                      matched_cdsco_manufacturer: medicine.matched_cdsco_manufacturer,
-                      product_match_score: medicine.product_match_score,
-                      manufacturer_match_score: medicine.manufacturer_match_score,
-                  }
-                : null,
-            manufacturer: manufacturer
-                ? {
-                      name: manufacturer.name,
-                      license_number: manufacturer.license_number,
-                      address: manufacturer.address,
-                      city: manufacturer.city,
-                      state: manufacturer.state,
-                      pincode: manufacturer.pincode,
-                      phone: manufacturer.phone,
-                      email: manufacturer.email,
-                      website: manufacturer.website,
-                      gmp_certified: manufacturer.gmp_certified,
-                      coordinates: manufacturer.location
-                          ? {
-                                lat: manufacturer.location.coordinates?.[1],
-                                lng: manufacturer.location.coordinates?.[0],
-                            }
-                          : null,
-                  }
-                : null,
-            expiry_status: getExpiryStatus(batchData.expiry_date),
-        });
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error({
-            message: "Batch traceability error",
-            error: message,
-            route: "/api/verify/batch",
-        });
-        res.status(500).json({ error: "Internal server error" });
     }
-});
+);
 
 // ── POST /api/verify/batch/report ─────────────────────────────────────────────
 

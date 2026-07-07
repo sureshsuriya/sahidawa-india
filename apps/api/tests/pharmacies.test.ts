@@ -293,6 +293,21 @@ describe("GET /api/pharmacies/nearest", () => {
     });
 });
 
+describe("GET /api/pharmacies/search-by-medicine", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it("should return Cache-Control header", async () => {
+        // A too-short query short-circuits with 400 before any DB call, but
+        // cacheMiddleware runs upstream of that validation so the header is
+        // still present.
+        const response = await request(app).get("/api/pharmacies/search-by-medicine?q=a");
+
+        expect(response.headers["cache-control"]).toContain("public");
+    });
+});
+
 describe("GET /api/pharmacies/in-bounds", () => {
     beforeEach(() => {
         jest.clearAllMocks();

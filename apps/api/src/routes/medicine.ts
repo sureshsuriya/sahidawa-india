@@ -10,6 +10,7 @@ import {
     setCachedVoiceResult,
 } from "../services/cache.service";
 import { scanQueryLimiter } from "../middleware/rateLimit";
+import { cacheMiddleware } from "../middleware/cache";
 import { escapePostgrest } from "../utils/db";
 import { getMlServiceUrl } from "../config/mlService";
 import { ServiceUnavailableError } from "../services/drugLookup.service";
@@ -188,7 +189,7 @@ router.post(
  * GET /api/medicine/languages
  * Returns supported Indian languages from ML service.
  */
-router.get("/languages", async (_req: Request, res: Response) => {
+router.get("/languages", cacheMiddleware(3600, 7200), async (_req: Request, res: Response) => {
     try {
         if (!ML_SERVICE_URL) {
             return res.status(503).json({ error: "ML service not configured" });

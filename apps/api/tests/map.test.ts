@@ -24,6 +24,12 @@ describe("GET /api/map/nearby", () => {
         jest.clearAllMocks();
     });
 
+    it("should return Cache-Control header", async () => {
+        const response = await request(app).get("/api/map/nearby?lat=north&lng=east");
+
+        expect(response.headers["cache-control"]).toContain("public");
+    });
+
     it.each([
         ["lat", "/api/map/nearby?lng=73.8567"],
         ["lng", "/api/map/nearby?lat=18.5204"],

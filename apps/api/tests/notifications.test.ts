@@ -130,6 +130,11 @@ describe("notifications routes", () => {
         expect(response.status).toBe(200);
     });
 
+    it("returns Cache-Control header for vapid public key", async () => {
+        const response = await request(app).get("/api/notifications/vapid-public-key");
+        expect(response.headers["cache-control"]).toContain("public");
+    });
+
     it("returns mock recall feed", async () => {
         const response = await request(app).get("/api/notifications/recalls/mock");
         expect(response.status).toBe(200);

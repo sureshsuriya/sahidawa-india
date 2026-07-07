@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { requireAuth, requireRole, optionalAuth, AuthenticatedRequest } from "../middleware/auth";
 import { notificationRegisterLimiter } from "../middleware/rateLimit";
+import { cacheMiddleware } from "../middleware/cache";
 import { verifyTwilioSignature } from "../middleware/twilioSignature";
 import { supabase, dbConfig } from "../db/client";
 import { smsService } from "../services/sms-service";
@@ -29,7 +30,7 @@ const unsubscribeSchema = z
     })
     .strict();
 
-router.get("/vapid-public-key", (_req, res) => {
+router.get("/vapid-public-key", cacheMiddleware(3600, 7200), (_req, res) => {
     const publicKey = getVapidPublicKey();
     res.json({
         publicKey,

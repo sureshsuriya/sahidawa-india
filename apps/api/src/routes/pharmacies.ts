@@ -482,6 +482,7 @@ function handleFetchError(
 router.get(
     "/search-by-medicine",
     limiter,
+    cacheMiddleware(300, 600),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const rawQuery = (req.query.q as string | undefined)?.trim() ?? "";
