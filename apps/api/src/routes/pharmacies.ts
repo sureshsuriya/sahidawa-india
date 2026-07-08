@@ -13,7 +13,13 @@ import multer from "multer";
 import { buildOrConditions } from "../utils/db";
 import Papa from "papaparse";
 import { Readable } from "stream";
-import { MAX_BULK_UPLOAD_ITEMS, MAX_BULK_UPLOAD_FILE_SIZE_BYTES } from "@sahidawa/shared";
+import {
+    MAX_BULK_UPLOAD_ITEMS,
+    MAX_BULK_UPLOAD_FILE_SIZE_BYTES,
+    PHARMACY_SEARCH_RADIUS_DEFAULT_KM,
+    PHARMACY_SEARCH_RADIUS_MIN_KM,
+    PHARMACY_SEARCH_RADIUS_MAX_KM,
+} from "@sahidawa/shared";
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -281,7 +287,11 @@ router.post(
 const nearestQuerySchema = z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180),
-    radius: z.coerce.number().min(1).max(200).default(50),
+    radius: z.coerce
+        .number()
+        .min(PHARMACY_SEARCH_RADIUS_MIN_KM)
+        .max(PHARMACY_SEARCH_RADIUS_MAX_KM)
+        .default(PHARMACY_SEARCH_RADIUS_DEFAULT_KM),
 });
 
 const boundsQuerySchema = z
@@ -714,7 +724,7 @@ router.get(
     redisCache(3600, (req: Request) => {
         const lat = Number(req.query.lat);
         const lng = Number(req.query.lng);
-        const radius = Number(req.query.radius ?? 50);
+        const radius = Number(req.query.radius ?? PHARMACY_SEARCH_RADIUS_DEFAULT_KM);
 
         return `pharmacies:nearest:${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}`;
     }),

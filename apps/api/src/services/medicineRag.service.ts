@@ -2,6 +2,11 @@ import { z } from "zod";
 import { anonSupabase } from "../db/supabase";
 import logger from "../utils/logger";
 import { escapeIlike, escapePostgrest } from "../utils/db";
+import {
+    PHARMACY_SEARCH_RADIUS_DEFAULT_KM,
+    PHARMACY_SEARCH_RADIUS_MIN_KM,
+    PHARMACY_SEARCH_RADIUS_MAX_KM,
+} from "@sahidawa/shared";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -109,7 +114,11 @@ export const recommendSchema = z.object({
     symptoms: z.string().trim().min(2).max(500),
     lat: z.coerce.number().min(-90).max(90).optional(),
     lng: z.coerce.number().min(-180).max(180).optional(),
-    radius: z.coerce.number().min(1).max(200).default(50),
+    radius: z.coerce
+        .number()
+        .min(PHARMACY_SEARCH_RADIUS_MIN_KM)
+        .max(PHARMACY_SEARCH_RADIUS_MAX_KM)
+        .default(PHARMACY_SEARCH_RADIUS_DEFAULT_KM),
     limit: z.coerce.number().int().min(1).max(20).default(DEFAULT_MATCH_COUNT),
 });
 
