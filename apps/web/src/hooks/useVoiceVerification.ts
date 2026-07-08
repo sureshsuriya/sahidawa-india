@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { getPreferredRecordingMimeType } from "@/app/[locale]/voice/lib/recording";
+import {
+    getPreferredRecordingMimeType,
+    isRecordingBlobTooLarge,
+    MAX_RECORDING_DURATION_MS,
+} from "@/app/[locale]/voice/lib/recording";
+
+const RECORDING_DURATION_LIMIT_MESSAGE =
+    "Recording stopped after 60 seconds. Please keep voice checks under one minute.";
+const RECORDING_SIZE_LIMIT_MESSAGE =
+    "Recording is too large. Please record a shorter clip under 20MB.";
 
 type VerificationResult = {
     medicine_name_original: string;
@@ -49,9 +58,23 @@ export function useVoiceVerification(): UseVoiceVerificationReturn {
     const chunksRef = useRef<Blob[]>([]);
     const animFrameRef = useRef<number | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
+    const recordingLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const clearRecordingLimitTimer = useCallback(() => {
+        if (recordingLimitTimerRef.current) {
+            clearTimeout(recordingLimitTimerRef.current);
+            recordingLimitTimerRef.current = null;
+        }
+    }, []);
 
     // Send audio to API
     const sendAudioToApi = useCallback(async (blob: Blob) => {
+        if (isRecordingBlobTooLarge(blob)) {
+            setError(RECORDING_SIZE_LIMIT_MESSAGE);
+            window.alert(RECORDING_SIZE_LIMIT_MESSAGE);
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
         try {
@@ -82,6 +105,7 @@ export function useVoiceVerification(): UseVoiceVerificationReturn {
     const startRecording = useCallback(async () => {
         setError(null);
         setResult(null);
+        clearRecordingLimitTimer();
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -113,6 +137,7 @@ export function useVoiceVerification(): UseVoiceVerificationReturn {
             };
 
             recorder.onstop = async () => {
+                clearRecordingLimitTimer();
                 stream.getTracks().forEach((t) => t.stop());
                 if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
                 setAudioLevel(0);
@@ -124,18 +149,30 @@ export function useVoiceVerification(): UseVoiceVerificationReturn {
             recorder.start();
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
+            recordingLimitTimerRef.current = setTimeout(() => {
+                if (recorder.state === "inactive") {
+                    return;
+                }
+
+                setError(RECORDING_DURATION_LIMIT_MESSAGE);
+                window.alert(RECORDING_DURATION_LIMIT_MESSAGE);
+                recorder.stop();
+                setIsRecording(false);
+            }, MAX_RECORDING_DURATION_MS);
         } catch {
+            clearRecordingLimitTimer();
             setError("Microphone access denied. Please allow microphone access and try again.");
         }
-    }, [sendAudioToApi]);
+    }, [clearRecordingLimitTimer, sendAudioToApi]);
 
     // Stop recording
     const stopRecording = useCallback(() => {
         if (mediaRecorderRef.current && isRecording) {
+            clearRecordingLimitTimer();
             mediaRecorderRef.current.stop();
             setIsRecording(false);
         }
-    }, [isRecording]);
+    }, [clearRecordingLimitTimer, isRecording]);
 
     // Reset
     const reset = useCallback(() => {
@@ -144,7 +181,8 @@ export function useVoiceVerification(): UseVoiceVerificationReturn {
         setIsRecording(false);
         setIsLoading(false);
         setAudioLevel(0);
-    }, []);
+        clearRecordingLimitTimer();
+    }, [clearRecordingLimitTimer]);
 
     return {
         isRecording,

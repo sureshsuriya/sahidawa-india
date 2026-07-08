@@ -77,18 +77,12 @@ const safeImageUrl = z
     });
 
 import { INDIAN_STATES_AND_DISTRICTS } from "../constants/administrativeMap";
+import { getBaseReportSchema } from "@sahidawa/validators";
 
-const createReportSchema = z
-    .object({
-        medicineName: z.string().min(2),
-        manufacturer: z.string().min(2),
-        description: z.string().min(20),
+const createReportSchema = getBaseReportSchema()
+    .extend({
         images: z.array(safeImageUrl).min(1),
-        pharmacyName: z.string().min(2),
-        address: z.string().min(5),
-        city: z.string().min(2),
         district: z.string().min(2).optional(),
-        state: z.string().min(2),
         pincode: z.string().regex(/^\d{6}$/),
         latitude: z
             .number()
@@ -100,7 +94,6 @@ const createReportSchema = z
             .min(-180, "Longitude must be between -180 and 180")
             .max(180, "Longitude must be between -180 and 180")
             .optional(),
-        scannedBarcode: z.string().optional(),
         medicineId: uuidSchema.optional(),
     })
     .superRefine((data, ctx) => {

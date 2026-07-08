@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import { useForm, FormProvider, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { getBaseReportFields } from "@sahidawa/validators";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
     submitReport,
@@ -50,32 +51,36 @@ const sanitize = (v: string): string => {
 };
 
 // ─── Zod schema ────────────────────────────────────────────────────────────────
-const buildSchema = (t: ReturnType<typeof useTranslations>) =>
-    z.object({
-        medicineName: z
-            .string()
-            .transform(sanitize)
-            .pipe(z.string().min(2, t("wizard.validation.minChars"))),
-        manufacturer: z
-            .string()
-            .transform(sanitize)
-            .pipe(z.string().min(2, t("wizard.validation.minChars"))),
-        description: z
-            .string()
-            .transform(sanitize)
-            .pipe(z.string().min(20, t("wizard.validation.descriptionMin"))),
+const uiField = (field: z.ZodString) => z.string().transform(sanitize).pipe(field);
+
+const buildSchema = (t: ReturnType<typeof useTranslations>) => {
+    const baseFields = getBaseReportFields({
+        medicineNameMin: t("wizard.validation.minChars"),
+        manufacturerMin: t("wizard.validation.minChars"),
+        descriptionMin: t("wizard.validation.descriptionMin"),
+        pharmacyNameMin: t("wizard.validation.required"),
+        addressMin: t("wizard.validation.required"),
+        cityMin: t("wizard.validation.required"),
+        stateMin: t("wizard.validation.required"),
+    });
+
+    return z.object({
+        medicineName: uiField(baseFields.medicineName),
+        manufacturer: uiField(baseFields.manufacturer),
+        description: uiField(baseFields.description),
         images: z.array(z.string().url()).min(1, t("wizard.validation.imagesRequired")),
-        pharmacyName: z.string().transform(sanitize).pipe(z.string().min(2, t("wizard.validation.required"))),
-        address: z.string().transform(sanitize).pipe(z.string().min(5, t("wizard.validation.required"))),
-        city: z.string().transform(sanitize).pipe(z.string().min(2, t("wizard.validation.required"))),
-        state: z.string().transform(sanitize).pipe(z.string().min(2, t("wizard.validation.required"))),
+        pharmacyName: uiField(baseFields.pharmacyName),
+        address: uiField(baseFields.address),
+        city: uiField(baseFields.city),
+        state: uiField(baseFields.state),
         pincode: z
             .string()
             .transform(sanitize)
             .pipe(z.string().regex(/^[1-9][0-9]{5}$/, t("wizard.validation.pincodeInvalid"))),
-        scannedBarcode: z.string().optional(),
+        scannedBarcode: baseFields.scannedBarcode,
         medicineId: z.string().optional(),
     });
+};
 export type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 const EMPTY: FormValues = {

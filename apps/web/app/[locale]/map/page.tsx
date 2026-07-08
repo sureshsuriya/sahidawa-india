@@ -634,12 +634,30 @@ export default function PharmacyMapPage() {
         }
     }, [fetchNearby, radiusKm]);
 
-    const handleMapMoveEnd = useCallback((bounds: MapBounds) => {
-        if (initialFetchDone.current) {
-            pendingBoundsRef.current = bounds;
-            setShowSearchArea(true);
-        }
-    }, []);
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleMapMoveEnd = useCallback(
+        (bounds: MapBounds) => {
+            if (initialFetchDone.current) {
+                pendingBoundsRef.current = bounds;
+
+                // Accurately reflect loading state during debounce delay
+                setIsLoading(true);
+                setShowSearchArea(false);
+
+                if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current);
+                }
+
+                debounceTimerRef.current = setTimeout(() => {
+                    if (pendingBoundsRef.current) {
+                        fetchInBounds(pendingBoundsRef.current);
+                    }
+                }, 500);
+            }
+        },
+        [fetchInBounds]
+    );
 
     const handleSearchThisArea = useCallback(() => {
         if (pendingBoundsRef.current) fetchInBounds(pendingBoundsRef.current);
