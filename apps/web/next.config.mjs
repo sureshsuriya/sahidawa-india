@@ -4,6 +4,7 @@ const withNextIntl = createNextIntlPlugin();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    transpilePackages: ["@sahidawa/validators", "@sahidawa/types", "@sahidawa/shared"],
     serverExternalPackages: ["lightningcss", "@tailwindcss/postcss", "@tailwindcss/node", "@tailwindcss/oxide"],
     images: {
         formats: ["image/avif", "image/webp"],
