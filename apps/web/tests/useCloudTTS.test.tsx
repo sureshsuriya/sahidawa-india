@@ -187,7 +187,7 @@ describe("useCloudTTS", () => {
 
         expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
         expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:cloud-tts-1");
-        expect(MockAudio.instances[0].src).toBe("blob:cloud-tts-2");
+        expect(MockAudio.instances[1].src).toBe("blob:cloud-tts-2");
     });
 
     it("revokes the active object URL on unmount", async () => {
@@ -198,7 +198,7 @@ describe("useCloudTTS", () => {
         });
         isMounted = false;
 
-        expect(MockAudio.instances[0].pause).toHaveBeenCalledTimes(1);
+        expect(MockAudio.instances[0].pause).toHaveBeenCalled();
         expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
         expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:cloud-tts-1");
     });

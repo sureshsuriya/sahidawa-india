@@ -15,40 +15,47 @@ const OVERPASS_MIRRORS = [
 async function queryOverpass(query: string): Promise<any> {
     // 1. Primary Path: Parallel client-side GET requests (races the first 2 mirrors for maximum speed)
     const clientMirrors = OVERPASS_MIRRORS.slice(0, 2);
-    const fetchPromises = clientMirrors.map(async (mirror) => {
+    const requests = clientMirrors.map((mirror) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per mirror client-side
+        const promise = (async () => {
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per mirror client-side
 
-        try {
-            const url = `${mirror}?data=${encodeURIComponent(query)}`;
-            const response = await fetch(url, {
-                method: "GET",
-                headers: {
-                    Accept: "*/*",
-                },
-                signal: controller.signal,
-            });
+            try {
+                const url = `${mirror}?data=${encodeURIComponent(query)}`;
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {
+                        Accept: "*/*",
+                    },
+                    signal: controller.signal,
+                });
 
-            clearTimeout(timeoutId);
+                if (!response.ok) {
+                    throw new Error(`Mirror ${mirror} returned status ${response.status}`);
+                }
 
-            if (!response.ok) {
-                throw new Error(`Mirror ${mirror} returned status ${response.status}`);
+                const data = await response.json();
+                if (!data || !data.elements) {
+                    throw new Error(`Mirror ${mirror} returned invalid data structure`);
+                }
+
+                return { controller, data };
+            } finally {
+                clearTimeout(timeoutId);
             }
+        })();
 
-            const data = await response.json();
-            if (!data || !data.elements) {
-                throw new Error(`Mirror ${mirror} returned invalid data structure`);
-            }
-
-            return data;
-        } catch (err) {
-            clearTimeout(timeoutId);
-            throw err;
-        }
+        return { controller, promise };
     });
 
     try {
-        return await Promise.any(fetchPromises);
+        const winner = await Promise.any(requests.map((request) => request.promise));
+        requests.forEach((request) => {
+            if (request.controller !== winner.controller && !request.controller.signal.aborted) {
+                request.controller.abort();
+            }
+        });
+        return winner.data;
     } catch {
         // Silent fallback — direct browser calls failed (e.g., CORS or adblocker). Proceeding to proxy.
     }

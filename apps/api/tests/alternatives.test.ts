@@ -24,6 +24,16 @@ describe("GET /api/v1/alternatives/:medicine_id", () => {
         jest.clearAllMocks();
     });
 
+    it("should return Cache-Control header", async () => {
+        // Out-of-range coordinates short-circuit with 400 before any DB call,
+        // but cacheMiddleware runs upstream of that validation.
+        const res = await request(app)
+            .get("/api/v1/alternatives/Lipitor")
+            .query({ lat: 999, lng: 999 });
+
+        expect(res.headers["cache-control"]).toContain("public");
+    });
+
     it("should return generic alternative mapping and nearest store information", async () => {
         // Mock medicine lookup
         ((supabase.from as jest.Mock)().maybeSingle as jest.Mock)

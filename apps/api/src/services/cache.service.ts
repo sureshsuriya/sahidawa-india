@@ -8,6 +8,8 @@ export const TTL_TIERS = {
     HOT: 86400, // 24 hours
     WARM: 21600, // 6 hours
     COLD: 3600, // 1 hour
+    // VOICE cache TTL in seconds. Default 30 days. Configurable via VOICE_CACHE_TTL_SECONDS
+    VOICE: parseInt(process.env.VOICE_CACHE_TTL_SECONDS ?? "2592000", 10), // 30 days
 };
 
 // Hit Thresholds
@@ -20,6 +22,11 @@ export const HIT_THRESHOLDS = {
 export const KEY_PREFIXES = {
     DRUG_CACHE: "drug:batch:",
     DRUG_HITS: "hits:drug:",
+    VOICE_CACHE: "medicine:voice:",
+    VOICE_AUDIO_CACHE: "medicine:voice:audio:",
+    PHARMACY_CACHE: "pharmacy:",
+    REPORT_CACHE: "report:",
+    USER_CACHE: "user:",
 };
 
 const CACHE_INVALIDATION_CHUNK_SIZE = 100;
@@ -265,6 +272,49 @@ export async function invalidateDrugCache(drugIds: string[]): Promise<string[]> 
 }
 
 /**
+ * Iterates through Redis and deletes all keys matching the interaction cache prefix.
+ * Uses SCAN to avoid blocking the event loop and deletes in chunks.
+ * Returns the number of keys deleted.
+ */
+export async function flushInteractionCache(): Promise<number> {
+    if (!redisClient.isOpen) return 0;
+    try {
+        let cursor = 0;
+        let totalDeleted = 0;
+        const scanIterator = redisClient.scanIterator({
+            MATCH: "interactions:*",
+            COUNT: 100,
+        });
+
+        let chunk: string[] = [];
+        for await (const key of scanIterator) {
+            if (Array.isArray(key)) {
+                chunk.push(...key);
+            } else {
+                chunk.push(key as any);
+            }
+            if (chunk.length >= CACHE_INVALIDATION_CHUNK_SIZE) {
+                await redisClient.del(chunk as any);
+                totalDeleted += chunk.length;
+                chunk = [];
+            }
+        }
+
+        // Delete any remaining keys in the last chunk
+        if (chunk.length > 0) {
+            await redisClient.del(chunk as any);
+            totalDeleted += chunk.length;
+        }
+
+        logger.info(`Successfully flushed ${totalDeleted} interaction cache keys`);
+        return totalDeleted;
+    } catch (err) {
+        logger.error("Error flushing interaction cache", err);
+        return 0;
+    }
+}
+
+/**
  * Returns cache performance stats: hit/miss counts, tier breakdown, top drugs.
  */
 export async function getCacheStats(): Promise<{
@@ -319,5 +369,117 @@ export async function getCacheStats(): Promise<{
             tierBreakdown: { hot: 0, warm: 0, cold: 0 },
             topDrugs: [],
         };
+    }
+}
+
+/**
+ * Retrieves a cached voice verification result by the transcribed medicine name.
+ * Increments the global hit counter on a cache hit.
+ */
+export async function getCachedVoiceResult(transcribedText: string): Promise<any | null> {
+    if (!redisClient.isOpen) return null;
+    const normalizedKey = transcribedText.toLowerCase().replace(/\s+/g, "_");
+    const cacheKey = `${KEY_PREFIXES.VOICE_CACHE}${normalizedKey}`;
+    try {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+            logger.info(`Voice cache HIT for: ${normalizedKey}`);
+            await redisClient.incr("stats:hits");
+            return JSON.parse(cached);
+        }
+    } catch (err) {
+        logger.error(`Error reading voice cache for key: ${normalizedKey}`, err);
+    }
+    return null;
+}
+
+/**
+ * Stores a voice verification result in Redis using TTL_TIERS.VOICE (default 30 days).
+ * This is configurable via `VOICE_CACHE_TTL_SECONDS` and is intended for
+ * stable medicine verification results that change infrequently.
+ * Increments the global miss counter to track cache misses from DB lookups.
+ */
+export async function setCachedVoiceResult(transcribedText: string, result: any): Promise<void> {
+    if (!redisClient.isOpen) return;
+    const normalizedKey = transcribedText.toLowerCase().replace(/\s+/g, "_");
+    const cacheKey = `${KEY_PREFIXES.VOICE_CACHE}${normalizedKey}`;
+    try {
+        await redisClient.set(cacheKey, JSON.stringify(result), {
+            EX: TTL_TIERS.VOICE,
+        });
+        await redisClient.incr("stats:misses");
+        logger.info(`Voice cache SET for: ${normalizedKey} (TTL: ${TTL_TIERS.VOICE}s)`);
+    } catch (err) {
+        logger.error(`Error writing voice cache for key: ${normalizedKey}`, err);
+    }
+}
+
+/**
+ * Retrieves a cached voice verification result by a SHA-256 hash of the raw audio buffer.
+ * On a hit, the ML transcription call is skipped entirely.
+ * Increments the global hit counter.
+ */
+export async function getCachedVoiceByAudioHash(audioHash: string): Promise<any | null> {
+    if (!redisClient.isOpen) return null;
+    const cacheKey = `${KEY_PREFIXES.VOICE_AUDIO_CACHE}${audioHash}`;
+    try {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+            logger.info(`Voice audio cache HIT for hash: ${audioHash}`);
+            await redisClient.incr("stats:hits");
+            return JSON.parse(cached);
+        }
+    } catch (err) {
+        logger.error(`Error reading voice audio cache for hash: ${audioHash}`, err);
+    }
+    return null;
+}
+
+/**
+ * Stores a voice verification result keyed by a SHA-256 hash of the raw audio buffer.
+ * Uses TTL_TIERS.VOICE (default 30 days). This TTL is configurable via
+ * `VOICE_CACHE_TTL_SECONDS` and keeps medicine verification results cached
+ * longer than the generic COLD tier which is intended for mutable batch data.
+ * Increments the global miss counter.
+ */
+export async function setCachedVoiceByAudioHash(audioHash: string, result: any): Promise<void> {
+    if (!redisClient.isOpen) return;
+    const cacheKey = `${KEY_PREFIXES.VOICE_AUDIO_CACHE}${audioHash}`;
+    try {
+        await redisClient.set(cacheKey, JSON.stringify(result), {
+            EX: TTL_TIERS.VOICE,
+        });
+        await redisClient.incr("stats:misses");
+        logger.info(`Voice audio cache SET for hash: ${audioHash} (TTL: ${TTL_TIERS.VOICE}s)`);
+    } catch (err) {
+        logger.error(`Error writing voice audio cache for hash: ${audioHash}`, err);
+    }
+}
+
+/**
+ * Dynamic table pattern invalidation using SCAN to prevent blocking the event loop.
+ */
+export async function invalidateCacheByPattern(pattern: string): Promise<string[]> {
+    if (!redisClient.isOpen) return [];
+    const keysToDelete: string[] = [];
+    let cursor: any = 0;
+
+    try {
+        do {
+            const result = await redisClient.scan(cursor, {
+                MATCH: pattern,
+                COUNT: 100,
+            });
+            cursor = result.cursor;
+            keysToDelete.push(...result.keys);
+        } while (cursor !== 0);
+
+        if (keysToDelete.length > 0) {
+            await redisClient.del(keysToDelete);
+        }
+        return keysToDelete;
+    } catch (err) {
+        logger.error(`Error scanning/deleting Redis pattern: ${pattern}`, err);
+        return [];
     }
 }

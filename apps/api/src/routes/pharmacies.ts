@@ -8,11 +8,23 @@ import { limiter } from "../middleware/rateLimit";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { FormattedPharmacy, PharmacyRpcResult } from "../types/pharmacy.types";
 import { redisCache } from "../middleware/redisCache";
+import { cacheMiddleware } from "../middleware/cache";
 import multer from "multer";
 import { buildOrConditions } from "../utils/db";
 import Papa from "papaparse";
+import { Readable } from "stream";
+import {
+    MAX_BULK_UPLOAD_ITEMS,
+    MAX_BULK_UPLOAD_FILE_SIZE_BYTES,
+    PHARMACY_SEARCH_RADIUS_DEFAULT_KM,
+    PHARMACY_SEARCH_RADIUS_MIN_KM,
+    PHARMACY_SEARCH_RADIUS_MAX_KM,
+} from "@sahidawa/shared";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BULK_UPLOAD_FILE_SIZE_BYTES },
+});
 
 const router = Router();
 
@@ -20,14 +32,7 @@ const router = Router();
 
 /** Maximum number of pharmacies returned per request */
 const MAX_RESULTS = 200;
-
-const GEOSPATIAL_CACHE_CONTROL = "public, max-age=300, s-maxage=300, stale-while-revalidate=600";
-
-const setGeospatialCacheHeaders = (res: Response) => {
-    res.setHeader("Cache-Control", GEOSPATIAL_CACHE_CONTROL);
-};
-
-import { cacheMiddleware } from "../middleware/cache";
+const BATCH_SIZE = 500;
 
 // ── TypeScript interfaces ────────────────────────────────────────────────────
 
@@ -80,6 +85,33 @@ const registerPharmacySchema = z.object({
     lat: z.number().min(-90).max(90).optional(),
     lng: z.number().min(-180).max(180).optional(),
 });
+// Zod schema for validating pharmacy update payloads (PUT /:id)
+// Mirrors registerPharmacySchema but all fields optional, since a client
+// may only send the fields they want to change.
+const updatePharmacySchema = z
+    .object({
+        name: z.string().min(2).optional(),
+        licenseId: z.string().min(3).optional(),
+        address: z.string().min(5).optional(),
+        district: z.string().min(2).optional(),
+        state: z.string().min(2).optional(),
+        phone_number: z
+            .string()
+            .regex(/^\+?[\d\s\-()]{7,15}$/)
+            .optional(),
+        lat: z.number().min(-90).max(90).optional(),
+        lng: z.number().min(-180).max(180).optional(),
+    })
+    .strict(); // reject unknown keys outright, don't silently drop them
+
+// Admin-only fields — validated and merged in separately, never from a
+// non-admin request body.
+const adminOnlyPharmacyFieldsSchema = z
+    .object({
+        status: z.enum(["pending", "approved", "rejected"]).optional(),
+        is_verified: z.boolean().optional(),
+    })
+    .strict();
 
 // Zod schema for validating each individual item inside an uploaded row
 const inventoryRowSchema = z.object({
@@ -95,6 +127,77 @@ const inventoryRowSchema = z.object({
     mrp: z.preprocess((val) => Number(val), z.number().positive("MRP must be a valid price")),
 });
 
+// Reusable incremental CSV parsing helper using PapaParse step mode
+async function parseCsvIncremental(fileContent: string, pharmacyId: string) {
+    return new Promise<{
+        rowsToInsert: any[];
+        failedRows: Array<{ row: number; reason: string }>;
+        totalRows: number;
+    }>((resolve) => {
+        const rowsToInsert: any[] = [];
+        const failedRows: Array<{ row: number; reason: string }> = [];
+        // csvRecordPos: increments for every row (including empty) — used for logical row numbering
+        let csvRecordPos = 0;
+        // nonEmptyDataRows: increments only for non-empty rows — used for totalRows and the row limit
+        let nonEmptyDataRows = 0;
+
+        Papa.parse<Record<string, string>>(fileContent, {
+            header: true,
+            // Do NOT skip empty lines so we can count them for correct row numbers
+            skipEmptyLines: false,
+            transformHeader: (h) => h.trim().toLowerCase(),
+            transform: (v) => v.trim(),
+            step: (results) => {
+                const rowData = results.data;
+                const errors = results.errors;
+                csvRecordPos++;
+                const logicalRow = csvRecordPos + 1; // +1 to account for header line (row 1)
+
+                // Detect an entirely empty record (all fields empty strings or undefined)
+                const allEmpty = Object.values(rowData).every((v) => v === "" || v === undefined);
+                if (allEmpty) {
+                    // Advance position counter only; do not count toward data rows
+                    return;
+                }
+
+                // Non-empty row: count it regardless of validity
+                nonEmptyDataRows++;
+
+                if (errors && errors.length > 0) {
+                    const reason = errors.map((e) => e.message).join(", ");
+                    failedRows.push({ row: logicalRow, reason });
+                    return;
+                }
+
+                // Normalise empty strings to undefined for Zod optional fields
+                const normalised: Record<string, any> = {};
+                for (const key of Object.keys(rowData)) {
+                    const val = rowData[key];
+                    normalised[key] = val === "" ? undefined : val;
+                }
+
+                const validationResult = inventoryRowSchema.safeParse(normalised);
+                if (!validationResult.success) {
+                    const reason = validationResult.error.issues.map((i) => i.message).join(", ");
+                    failedRows.push({ row: logicalRow, reason });
+                    return;
+                }
+
+                rowsToInsert.push({
+                    pharmacy_id: pharmacyId,
+                    medicine_name: validationResult.data.medicine_name,
+                    batch_number: validationResult.data.batch_number,
+                    expiry_date: validationResult.data.expiry_date,
+                    quantity: validationResult.data.quantity,
+                    mrp: validationResult.data.mrp,
+                });
+            },
+            complete: () => {
+                resolve({ rowsToInsert, failedRows, totalRows: nonEmptyDataRows });
+            },
+        });
+    });
+}
 // ── Pharmacy registration ────────────────────────────────────────────────────
 
 /**
@@ -184,7 +287,11 @@ router.post(
 const nearestQuerySchema = z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180),
-    radius: z.coerce.number().min(1).max(200).default(50),
+    radius: z.coerce
+        .number()
+        .min(PHARMACY_SEARCH_RADIUS_MIN_KM)
+        .max(PHARMACY_SEARCH_RADIUS_MAX_KM)
+        .default(PHARMACY_SEARCH_RADIUS_DEFAULT_KM),
 });
 
 const boundsQuerySchema = z
@@ -387,6 +494,7 @@ function handleFetchError(
 router.get(
     "/search-by-medicine",
     limiter,
+    cacheMiddleware(300, 600),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const rawQuery = (req.query.q as string | undefined)?.trim() ?? "";
@@ -616,7 +724,7 @@ router.get(
     redisCache(3600, (req: Request) => {
         const lat = Number(req.query.lat);
         const lng = Number(req.query.lng);
-        const radius = Number(req.query.radius ?? 50);
+        const radius = Number(req.query.radius ?? PHARMACY_SEARCH_RADIUS_DEFAULT_KM);
 
         return `pharmacies:nearest:${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}`;
     }),
@@ -904,7 +1012,6 @@ router.get(
                         timezone: p.timezone ?? null,
                     }))
                     .slice(0, MAX_RESULTS);
-                setGeospatialCacheHeaders(res);
                 return res.json({
                     pharmacies,
                     syncedAt,
@@ -987,7 +1094,6 @@ router.get(
                 .slice(0, MAX_RESULTS)
                 .map(({ coords, ...rest }) => rest);
 
-            setGeospatialCacheHeaders(res);
             res.json({
                 pharmacies,
                 syncedAt,
@@ -1019,69 +1125,44 @@ router.post(
             // Strip UTF-8 BOM if present
             const fileContent = rawFileContent.replace(/^\uFEFF/, "");
 
-            const { data: pharmacy, error: pharmError } = await supabase
-                .from("pharmacies")
-                .select("id")
-                .eq("created_by", req.user.id)
-                .maybeSingle();
+            const pharmacyId = req.body.pharmacyId || req.query.pharmacyId;
 
-            if (pharmError || !pharmacy) {
+            let query = supabase.from("pharmacies").select("id").eq("created_by", req.user.id);
+
+            if (pharmacyId) {
+                query = query.eq("id", pharmacyId);
+            } else {
+                query = query.order("created_at", { ascending: false });
+            }
+
+            const { data: pharmacies, error: pharmError } = await query;
+
+            if (pharmError || !pharmacies || pharmacies.length === 0) {
                 res.status(404).json({
                     error: "No registered pharmacy found for this authorized user.",
                 });
                 return;
             }
 
-            // Parse CSV with papaparse — handles quoted fields, embedded commas,
-            // escaped/nested quotes, and inconsistent line endings correctly
-            const parseResult = Papa.parse<Record<string, string>>(fileContent, {
-                header: true,
-                skipEmptyLines: true,
-                transformHeader: (h) => h.trim().toLowerCase(),
-                transform: (v) => v.trim(),
-            });
+            const pharmacy = pharmacies[0];
 
-            if (parseResult.data.length === 0) {
+            // Incremental parsing using the reusable helper (pharmacyId is already known)
+            const { rowsToInsert, failedRows, totalRows } = await parseCsvIncremental(
+                fileContent,
+                pharmacy.id
+            );
+
+            if (totalRows === 0) {
                 res.status(400).json({ error: "The file appears empty or is missing rows." });
                 return;
             }
 
-            if (parseResult.data.length > 500) {
+            if (totalRows > MAX_BULK_UPLOAD_ITEMS) {
                 res.status(400).json({
-                    error: "Bulk upload exceeds the maximum limit of 500 items per request.",
+                    error: `Bulk upload exceeds the maximum limit of ${MAX_BULK_UPLOAD_ITEMS} items per request.`,
                 });
                 return;
             }
-
-            const rowsToInsert: InventoryInsertRow[] = [];
-            const failedRows: Array<{ row: number; reason: string }> = [];
-
-            parseResult.data.forEach((rowData, index) => {
-                // Normalise empty strings to undefined so Zod optional fields work correctly
-                const normalised: Record<string, string | undefined> = {};
-                for (const key of Object.keys(rowData)) {
-                    normalised[key] = rowData[key] === "" ? undefined : rowData[key];
-                }
-
-                const validationResult = inventoryRowSchema.safeParse(normalised);
-                if (!validationResult.success) {
-                    const errorMessage = validationResult.error.issues
-                        .map((e: { message: string }) => e.message)
-                        .join(", ");
-                    // +2: 1 for header row, 1 for 1-based row numbering
-                    failedRows.push({ row: index + 2, reason: errorMessage });
-                    return;
-                }
-
-                rowsToInsert.push({
-                    pharmacy_id: pharmacy.id,
-                    medicine_name: validationResult.data.medicine_name,
-                    batch_number: validationResult.data.batch_number,
-                    expiry_date: validationResult.data.expiry_date,
-                    quantity: validationResult.data.quantity,
-                    mrp: validationResult.data.mrp,
-                });
-            });
 
             let successfulInserts = 0;
             if (rowsToInsert.length > 0) {
@@ -1095,7 +1176,7 @@ router.post(
             }
 
             res.status(200).json({
-                totalRows: parseResult.data.length,
+                totalRows,
                 successCount: successfulInserts,
                 failedCount: failedRows.length,
                 errors: failedRows,
@@ -1145,13 +1226,30 @@ router.put(
                 return;
             }
 
-            const updateData = req.body;
-            // Ensure we don't accidentally update restricted fields unless admin
-            delete updateData.id;
-            delete updateData.created_by;
-            if (!isAdmin) {
-                delete updateData.status;
-                delete updateData.is_verified;
+            const parsedBody = updatePharmacySchema.safeParse(req.body);
+            if (!parsedBody.success) {
+                res.status(400).json({
+                    error: "Invalid pharmacy update payload",
+                    issues: parsedBody.error.issues,
+                });
+                return;
+            }
+
+            let updateData: Record<string, unknown> = { ...parsedBody.data };
+
+            if (isAdmin) {
+                const parsedAdminFields = adminOnlyPharmacyFieldsSchema.safeParse({
+                    status: req.body.status,
+                    is_verified: req.body.is_verified,
+                });
+                if (!parsedAdminFields.success) {
+                    res.status(400).json({
+                        error: "Invalid admin fields in pharmacy update payload",
+                        issues: parsedAdminFields.error.issues,
+                    });
+                    return;
+                }
+                updateData = { ...updateData, ...parsedAdminFields.data };
             }
 
             const { data: updatedPharmacy, error: updateError } = await supabase
@@ -1160,7 +1258,6 @@ router.put(
                 .eq("id", pharmacyId)
                 .select()
                 .single();
-
             if (updateError) {
                 logger.error(`Pharmacy update failed: ${updateError.message}`);
                 res.status(500).json({ error: "Database operation failed during update." });
@@ -1226,129 +1323,6 @@ router.delete(
 
             res.status(200).json({ message: "Pharmacy deleted successfully" });
         } catch (error: unknown) {
-            next(error);
-        }
-    }
-);
-
-/**
- * Inventory Bulk Upload (POST /:id/inventory/upload) using Multer
- */
-router.post(
-    "/:id/inventory/upload",
-    requireAuth,
-    limiter,
-    upload.single("file"),
-    async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
-        const parsedId = uuidSchema.safeParse(req.params.id);
-        if (!parsedId.success) {
-            res.status(400).json({ error: "Invalid UUID format" });
-            return;
-        }
-        try {
-            const pharmacyId = req.params.id;
-
-            const { data: pharmacy, error: findError } = await supabase
-                .from("pharmacies")
-                .select("id, created_by, status")
-                .eq("id", pharmacyId)
-                .maybeSingle();
-
-            if (findError || !pharmacy) {
-                res.status(404).json({ error: "Pharmacy not found" });
-                return;
-            }
-
-            // Ownership check: must be creator OR admin
-            const isOwner = pharmacy.created_by === req.user!.id;
-            const isAdmin = req.user!.role === "admin" || req.user!.role === "moderator";
-
-            if (!isOwner && !isAdmin) {
-                res.status(403).json({
-                    error: "You can only upload inventory for pharmacies you own",
-                });
-                return;
-            }
-
-            if (!req.file || !req.file.buffer) {
-                res.status(400).json({ error: "No valid file data content provided." });
-                return;
-            }
-
-            // Strip UTF-8 BOM if present
-            const fileContent = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
-
-            // Parse CSV with papaparse — handles quoted fields, embedded commas,
-            // escaped/nested quotes, and inconsistent line endings correctly
-            const parseResult = Papa.parse<Record<string, string>>(fileContent, {
-                header: true,
-                skipEmptyLines: true,
-                transformHeader: (h) => h.trim().toLowerCase(),
-                transform: (v) => v.trim(),
-            });
-
-            if (parseResult.data.length === 0) {
-                res.status(400).json({ error: "The file appears empty or is missing rows." });
-                return;
-            }
-
-            if (parseResult.data.length > 500) {
-                res.status(400).json({
-                    error: "Bulk upload exceeds the maximum limit of 500 items per request.",
-                });
-                return;
-            }
-
-            const rowsToInsert: InventoryInsertRow[] = [];
-            const failedRows: Array<{ row: number; reason: string }> = [];
-
-            parseResult.data.forEach((rowData, index) => {
-                // Normalise empty strings to undefined so Zod optional fields work correctly
-                const normalised: Record<string, string | undefined> = {};
-                for (const key of Object.keys(rowData)) {
-                    normalised[key] = rowData[key] === "" ? undefined : rowData[key];
-                }
-
-                const validationResult = inventoryRowSchema.safeParse(normalised);
-                if (!validationResult.success) {
-                    const errorMessage = validationResult.error.issues
-                        .map((e: { message: string }) => e.message)
-                        .join(", ");
-                    // +2: 1 for header row, 1 for 1-based row numbering
-                    failedRows.push({ row: index + 2, reason: errorMessage });
-                    return;
-                }
-
-                rowsToInsert.push({
-                    pharmacy_id: pharmacyId,
-                    medicine_name: validationResult.data.medicine_name,
-                    batch_number: validationResult.data.batch_number,
-                    expiry_date: validationResult.data.expiry_date,
-                    quantity: validationResult.data.quantity,
-                    mrp: validationResult.data.mrp,
-                });
-            });
-
-            let successfulInserts = 0;
-            if (rowsToInsert.length > 0) {
-                const { error } = await supabase.from("pharmacy_inventory").insert(rowsToInsert);
-                if (error) {
-                    logger.error(`Database bulk insertion failed: ${error.message}`);
-                    res.status(500).json({ error: "Database operation failed during insertion." });
-                    return;
-                }
-                successfulInserts = rowsToInsert.length;
-            }
-
-            res.status(200).json({
-                totalRows: parseResult.data.length,
-                successCount: successfulInserts,
-                failedCount: failedRows.length,
-                errors: failedRows,
-            });
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Unknown error";
-            logger.error(`Exception in specific pharmacy upload handler: ${message}`);
             next(error);
         }
     }

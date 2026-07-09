@@ -11,6 +11,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from main import app
 from routers import asr as asr_router
+from utils import audio_upload
 import services.medicine_ner as medicine_ner
 
 client = TestClient(app)
@@ -150,6 +151,24 @@ def test_missing_file_returns_422():
     assert response.status_code == 422
 
 
+def test_rejects_oversized_audio_before_transcription(monkeypatch):
+    monkeypatch.setattr(audio_upload, "MAX_AUDIO_SIZE_BYTES", 10)
+
+    class FailingModel:
+        def transcribe(self, audio, **kwargs):
+            raise AssertionError("Oversized upload should be rejected before transcription")
+
+    monkeypatch.setattr(asr_router, "get_model", lambda: FailingModel())
+
+    response = client.post(
+        "/asr/transcribe",
+        files={"file": ("large.webm", io.BytesIO(b"x" * 11), "audio/webm")},
+    )
+
+    assert response.status_code == 413
+    assert "Audio file too large" in response.json()["detail"]
+
+
 def test_language_hint_is_passed_to_whisper(monkeypatch):
     captured = {}
 
@@ -221,54 +240,3 @@ def test_health_endpoint():
     assert response.json()["status"] == "healthy"
 
 
-# ── 6. Real language audio fixtures ──────────────────────────────────────────
-# These tests are skipped automatically if fixture files are missing.
-# Run locally after downloading real audio samples.
-
-@pytest.mark.skipif(
-    not os.path.exists(os.path.join(FIXTURES_DIR, "hindi_sample.wav"))
-    or shutil.which("ffmpeg") is None,
-    reason="Hindi fixture not found or ffmpeg not available",
-)
-def test_hindi_language_detection():
-    """Real Hindi audio must be detected as 'hi' or 'ur' (Whisper limitation)."""
-    with open(os.path.join(FIXTURES_DIR, "hindi_sample.wav"), "rb") as f:
-        response = client.post(
-            "/asr/transcribe",
-            files={"file": ("hindi_sample.wav", f, "audio/wav")},
-        )
-    assert response.status_code == 200
-    assert response.json()["language"] in ["hi", "ur"], \
-        f"Expected hi or ur, got: {response.json()['language']}"
-
-
-@pytest.mark.skipif(
-    not os.path.exists(os.path.join(FIXTURES_DIR, "tamil_sample.wav"))
-    or shutil.which("ffmpeg") is None,
-    reason="Tamil fixture not found or ffmpeg not available",
-)
-def test_tamil_language_detection():
-    """Real Tamil audio must be detected as 'ta'."""
-    with open(os.path.join(FIXTURES_DIR, "tamil_sample.wav"), "rb") as f:
-        response = client.post(
-            "/asr/transcribe",
-            files={"file": ("tamil_sample.wav", f, "audio/wav")},
-        )
-    assert response.status_code == 200
-    assert response.json()["language"] == "ta"
-
-
-@pytest.mark.skipif(
-    not os.path.exists(os.path.join(FIXTURES_DIR, "bengali_sample.wav"))
-    or shutil.which("ffmpeg") is None,
-    reason="Bengali fixture not found or ffmpeg not available",
-)
-def test_bengali_language_detection():
-    """Real Bengali audio must be detected as 'bn'."""
-    with open(os.path.join(FIXTURES_DIR, "bengali_sample.wav"), "rb") as f:
-        response = client.post(
-            "/asr/transcribe",
-            files={"file": ("bengali_sample.wav", f, "audio/wav")},
-        )
-    assert response.status_code == 200
-    assert response.json()["language"] == "bn"

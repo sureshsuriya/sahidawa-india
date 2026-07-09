@@ -1,12 +1,5 @@
 import { supabase } from "../db/client";
-
-export type LasaMatchType = "sound-alike" | "look-alike";
-
-export interface LasaMatch {
-    name: string;
-    type: LasaMatchType;
-    score?: number;
-}
+import type { LasaMatch, LasaMatchType } from "@sahidawa/types";
 
 // ── In-process TTL cache ────────────────────────────────────────────────────
 //

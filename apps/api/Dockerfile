@@ -9,6 +9,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/api/package.json ./apps/api/
+COPY packages/validators/package.json ./packages/validators/
 
 RUN npm ci
 
@@ -31,6 +32,7 @@ FROM deps AS builder
 COPY . .
 
 # tsc compiles src/ → dist/
+RUN npm run build -w packages/validators
 RUN npm run build -w apps/api
 
 # ============================================================
@@ -55,11 +57,13 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/web/package.json ./apps/web/
+COPY --from=builder /app/packages/validators/package.json ./packages/validators/
 
 RUN npm ci --omit=dev --ignore-scripts
 
 # Copy compiled JavaScript output
 COPY --from=builder --chown=apiuser:nodejs /app/apps/api/dist ./apps/api/dist
+COPY --from=builder --chown=apiuser:nodejs /app/packages/validators/dist ./packages/validators/dist
 
 # Copy ws-setup.js (required by the start script runtime)
 COPY --from=builder --chown=apiuser:nodejs /app/apps/api/ws-setup.js ./apps/api/

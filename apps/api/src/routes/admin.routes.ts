@@ -15,8 +15,14 @@ import {
     getAllPharmacies,
     deletePharmacy,
     restorePharmacy,
+    getPendingVerificationRequests,
+    reviewVerificationRequest,
 } from "../controllers/admin.controller";
-import { invalidateDrugCache, KEY_PREFIXES } from "../services/cache.service";
+import {
+    invalidateDrugCache,
+    flushInteractionCache,
+    KEY_PREFIXES,
+} from "../services/cache.service";
 import { redisClient } from "../utils/redis";
 import { getPushNotificationAnalytics } from "./analytics";
 import { limiter } from "../middleware/rateLimit";
@@ -91,6 +97,22 @@ router.post(
     requireRole("admin"),
     validateIdParam,
     restorePharmacy
+);
+
+// ── OCR Verification Queue ────────────────────────────────────────────────────
+router.get(
+    "/verifications",
+    requireAuth,
+    requireRole("admin", "moderator"),
+    getPendingVerificationRequests
+);
+
+router.patch(
+    "/verifications/:id/review",
+    requireAuth,
+    requireRole("admin"),
+    validateIdParam,
+    reviewVerificationRequest
 );
 
 const InvalidateCacheSchema = z.object({
@@ -201,6 +223,33 @@ router.post(
             res.status(200).json({
                 success: true,
                 message: "OCR Synonyms cache invalidated and reloaded successfully",
+            });
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                error: (err as Error).message,
+            });
+        }
+    }
+);
+
+router.post(
+    "/cache/flush-interactions",
+    requireAuth,
+    requireRole("admin", "moderator"),
+    async (req: AuthenticatedRequest, res: Response) => {
+        try {
+            const count = await flushInteractionCache();
+
+            await logAdminAction(req.user!.id, "FLUSH_INTERACTIONS", "MEDICINE", "cache", {
+                total_keys_invalidated: count,
+                timestamp: new Date().toISOString(),
+            });
+
+            res.status(200).json({
+                success: true,
+                message: "Interaction cache flushed successfully",
+                invalidated: count,
             });
         } catch (err) {
             res.status(500).json({

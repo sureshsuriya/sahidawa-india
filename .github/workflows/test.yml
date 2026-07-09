@@ -17,14 +17,20 @@ jobs:
               with:
                   fetch-depth: 2
 
-            - name: ⚙️ Setup Node.js 24
+            - name: ⚙️ Setup Node.js from .nvmrc
               uses: actions/setup-node@v6
               with:
-                  node-version: 24
+                  node-version-file: .nvmrc
                   cache: "npm"
 
+            - name: 📦 Upgrade npm
+              run: npm install -g npm@10
+
             - name: 📦 Install Dependencies (Monorepo)
-              run: npm ci
+              run: npm install --legacy-peer-deps
+            
+            - name: 🔒 Run npm audit
+              run: npm audit --audit-level=high
 
             - name: ⚡ Cache Turborepo
               uses: actions/cache@v6
@@ -89,6 +95,7 @@ jobs:
               run: python -m pytest tests/ -v --timeout=60
               env:
                   WHISPER_MODEL_SIZE: base
+                  PYTHONPATH: ${{ github.workspace }}
 
     test-docker-builds:
         name: 🐳 Test Docker Builds
@@ -113,10 +120,32 @@ jobs:
               with:
                   separator: " "
 
+            - name: 📦 Install Dependencies
+              run: npm install --legacy-peer-deps
+
             - name: 💅 Run Prettier on Changed Files
               if: steps.changed-files.outputs.any_changed == 'true'
               run: |
                   FILES="${{ steps.changed-files.outputs.all_changed_files }}"
                   if [ -n "$FILES" ]; then
-                      npx prettier --ignore-unknown --check $FILES || echo "Prettier found issues. Ignoring failure as requested."
+                      npx prettier --ignore-unknown --check $FILES
                   fi
+
+    test-supabase-migrations:
+        name: 🗄️ Test Supabase Migrations
+        runs-on: ubuntu-latest
+        steps:
+            - name: ⬇️ Checkout Code
+              uses: actions/checkout@v7
+
+            - name: ⚙️ Setup Supabase CLI
+              uses: supabase/setup-cli@v3
+              with:
+                  version: latest
+
+            - name: 🚀 Verify Supabase Migrations
+              run: supabase start
+
+            - name: 🛑 Shutdown Supabase Stack
+              if: always()
+              run: supabase stop

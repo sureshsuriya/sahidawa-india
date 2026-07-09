@@ -1,5 +1,7 @@
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || "http://localhost:54321";
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "test-anon-key";
+// Make DNS lookup timeouts fast in tests so hanging lookups don't slow CI
+process.env.DNS_LOOKUP_TIMEOUT_MS = process.env.DNS_LOOKUP_TIMEOUT_MS || "50";
 
 (global as any).WebSocket = (global as any).WebSocket || class {};
 
@@ -15,6 +17,10 @@ jest.mock("../src/db/client", () => ({
         limit: jest.fn().mockReturnThis(),
         single: jest.fn(),
     },
+}));
+
+jest.mock("dns/promises", () => ({
+    lookup: jest.fn().mockResolvedValue({ address: "8.8.8.8", family: 4 }),
 }));
 
 jest.mock("../src/services/reportValidation.service", () => ({
@@ -164,6 +170,34 @@ describe("Reports API Routes", () => {
             expect(response.status).toBe(201);
             expect(response.body.report).toHaveProperty("id");
             expect(response.body.report).toHaveProperty("report_location");
+        });
+
+        it("blocks a slow/hanging DNS lookup and returns 400", async () => {
+            const dns = require("dns");
+            const originalLookup = dns.promises.lookup;
+
+            // Mock lookup to never resolve (hang)
+            dns.promises.lookup = jest.fn().mockImplementation(() => new Promise(() => {}));
+
+            const payload = {
+                medicineName: "Aspirin 500mg",
+                manufacturer: "TestCo",
+                description: "This is a detailed description of the issue",
+                images: ["http://stall.example.com/image.jpg"],
+                pharmacyName: "Test Pharmacy",
+                address: "123 Main St",
+                city: "Delhi",
+                state: "Delhi",
+                pincode: "110001",
+            };
+
+            try {
+                const response = await request(app).post("/api/reports").send(payload);
+                expect(response.status).toBe(400);
+                expect(response.body.error).toBe("Invalid report payload");
+            } finally {
+                dns.promises.lookup = originalLookup;
+            }
         });
 
         it("parses coordinates into POINT format correctly", async () => {
@@ -555,6 +589,37 @@ describe("Reports API Routes", () => {
             expect(response.body.issues[0].message).toBe(
                 "Invalid district 'pune dist' for state 'Maharashtra'"
             );
+        });
+
+        it("blocks SSRF attempts with DNS rebinding/resolution to private IPs", async () => {
+            const dns = require("dns/promises");
+
+            // Mock dns.lookup to resolve to a private IP (e.g. AWS Metadata IP or local)
+            (dns.lookup as jest.Mock).mockResolvedValueOnce({
+                address: "169.254.169.254",
+                family: 4,
+            });
+
+            const payload = {
+                medicineName: "Aspirin 500mg",
+                manufacturer: "TestCo",
+                description: "This is a detailed description of the issue",
+                images: ["https://example-dns-rebind.com/image.jpg"],
+                pharmacyName: "Test Pharmacy",
+                address: "123 Main St",
+                city: "Delhi",
+                state: "Delhi",
+                pincode: "110001",
+            };
+
+            const response = await request(app).post("/api/reports").send(payload);
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe("Invalid report payload");
+            expect(response.body.issues[0].message).toBe(
+                "Image URL must use http(s) and must not point to a private, loopback, or link-local address"
+            );
+            expect(dns.lookup).toHaveBeenCalledWith("example-dns-rebind.com");
         });
     });
 

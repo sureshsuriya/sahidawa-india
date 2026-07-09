@@ -20,7 +20,8 @@ export async function syncDistrictAlertTallies(): Promise<void> {
             .select("district, reported_brand_name")
             .eq("status", "verified_fake")
             .eq("is_escalated", false)
-            .not("district", "is", null);
+            .not("district", "is", null)
+            .or(`snoozed_until.is.null,snoozed_until.lte.${new Date().toISOString()}`);
 
         if (countError) {
             logger.error("District alert sync: failed to fetch report counts", {
@@ -91,10 +92,7 @@ export async function syncDistrictAlertTallies(): Promise<void> {
         }
 
         // 4. Deactivate stale district_alerts with no remaining verified reports
-        const activeKeys = Array.from(tally.keys()).map((key) => {
-            const [district, medicine_name] = key.split("::");
-            return { district, medicine_name };
-        });
+        const activeKeys = new Set(tally.keys());
 
         const { data: allAlerts } = await supabase
             .from("district_alerts")
@@ -102,16 +100,22 @@ export async function syncDistrictAlertTallies(): Promise<void> {
             .eq("is_active", true);
 
         if (allAlerts) {
-            for (const alert of allAlerts) {
-                const stillActive = activeKeys.some(
-                    (k) => k.district === alert.district && k.medicine_name === alert.medicine_name
-                );
+            const staleAlertIds = allAlerts
+                .filter((alert) => !activeKeys.has(`${alert.district}::${alert.medicine_name}`))
+                .map((alert) => alert.id);
 
-                if (!stillActive) {
-                    await supabase
-                        .from("district_alerts")
-                        .update({ is_active: false, updated_at: new Date().toISOString() })
-                        .eq("id", alert.id);
+            if (staleAlertIds.length > 0) {
+                const { error: deactivateError } = await supabase
+                    .from("district_alerts")
+                    .update({ is_active: false, updated_at: new Date().toISOString() })
+                    .in("id", staleAlertIds);
+
+                if (deactivateError) {
+                    logger.error("District alert sync: stale alert deactivation failed", {
+                        staleAlertCount: staleAlertIds.length,
+                        error: deactivateError.message,
+                    });
+                    errors += 1;
                 }
             }
         }
@@ -130,7 +134,14 @@ export async function syncDistrictAlertTallies(): Promise<void> {
 export const initDistrictAlertSyncCron = (): void => {
     // Runs every 6 hours
     cron.schedule("0 */6 * * *", async () => {
-        await syncDistrictAlertTallies();
+        try {
+            await syncDistrictAlertTallies();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error("District alert tally sync cron: unhandled error during scheduled run", {
+                error: message,
+            });
+        }
     });
     logger.info("District alert tally sync cron initialized (every 6 hours)");
 };

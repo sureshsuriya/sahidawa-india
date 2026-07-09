@@ -8,7 +8,50 @@ import { requireAuth } from "../middleware/auth";
 const router = Router();
 const QuerySchema = z.object({
     days: z.coerce.number().int().min(1).max(365).default(30),
+    precision: z.coerce.number().int().min(1).max(12).default(6),
 });
+
+function encodeGeohash(latitude: number, longitude: number, precision: number = 6): string {
+    const BASE32_CHARS = "0123456789bcdefghjkmnpqrstuvwxyz";
+    let isEven = true;
+    let latMin = -90.0,
+        latMax = 90.0;
+    let lngMin = -180.0,
+        lngMax = 180.0;
+    let geohash = "";
+    let bit = 0;
+    let ch = 0;
+
+    while (geohash.length < precision) {
+        if (isEven) {
+            const mid = (lngMin + lngMax) / 2;
+            if (longitude > mid) {
+                ch |= 1 << (4 - bit);
+                lngMin = mid;
+            } else {
+                lngMax = mid;
+            }
+        } else {
+            const mid = (latMin + latMax) / 2;
+            if (latitude > mid) {
+                ch |= 1 << (4 - bit);
+                latMin = mid;
+            } else {
+                latMax = mid;
+            }
+        }
+
+        isEven = !isEven;
+        if (bit < 4) {
+            bit++;
+        } else {
+            geohash += BASE32_CHARS[ch];
+            bit = 0;
+            ch = 0;
+        }
+    }
+    return geohash;
+}
 
 type PushNotificationEventRow = {
     status: string | null;
@@ -55,7 +98,7 @@ function summarizePushNotificationEvents(rows: PushNotificationEventRow[]) {
 
 router.get("/heatmap", requireAuth, analyticsLimiter, async (req: Request, res: Response) => {
     try {
-        const { days } = QuerySchema.parse(req.query);
+        const { days, precision } = QuerySchema.parse(req.query);
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
         const { data: scans, error } = await supabase
@@ -72,26 +115,47 @@ router.get("/heatmap", requireAuth, analyticsLimiter, async (req: Request, res: 
             return;
         }
 
-        const grouped = new Map<string, { lat: number; lng: number; intensity: number }>();
+        const geohashGroups = new Map<
+            string,
+            { totalLat: number; totalLng: number; count: number }
+        >();
+
         for (const scan of scans || []) {
-            const lat = Math.round(parseFloat(scan.latitude as string) * 100) / 100;
-            const lng = Math.round(parseFloat(scan.longitude as string) * 100) / 100;
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
-            const key = `${lat},${lng}`;
-            const entry = grouped.get(key) || { lat, lng, intensity: 0 };
-            entry.intensity++;
-            grouped.set(key, entry);
+            const rawLat = parseFloat(scan.latitude as string);
+            const rawLng = parseFloat(scan.longitude as string);
+
+            if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng)) continue;
+            if (rawLat < -90 || rawLat > 90 || rawLng < -180 || rawLng > 180) continue;
+
+            const hash = encodeGeohash(rawLat, rawLng, precision);
+            const group = geohashGroups.get(hash) || { totalLat: 0, totalLng: 0, count: 0 };
+
+            group.totalLat += rawLat;
+            group.totalLng += rawLng;
+            group.count += 1;
+            geohashGroups.set(hash, group);
         }
 
-        const features = Array.from(grouped.values()).map((point) => ({
-            type: "Feature" as const,
-            geometry: {
-                type: "Point" as const,
-                coordinates: [point.lng, point.lat],
-            },
-            properties: { intensity: point.intensity },
-        }));
+        // C. Features mapping (Centroid points aur properties mein geohash return)
+        const features = Array.from(geohashGroups.entries()).map(([hash, data]) => {
+            const centroidLat = data.totalLat / data.count;
+            const centroidLng = data.totalLng / data.count;
+
+            return {
+                type: "Feature" as const,
+                geometry: {
+                    type: "Point" as const,
+                    coordinates: [
+                        Math.round(centroidLng * 100000) / 100000,
+                        Math.round(centroidLat * 100000) / 100000,
+                    ],
+                },
+                properties: {
+                    intensity: data.count,
+                    geohash: hash, // Frontend capability enhancement ke liye
+                },
+            };
+        });
 
         const geoJson = {
             type: "FeatureCollection",

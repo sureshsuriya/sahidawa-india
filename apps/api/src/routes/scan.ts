@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -645,11 +646,15 @@ router.post("/extract", uploadRateLimiter, validateUploadSize, (req: Request, re
  *         description: Match suggestions found
  */
 router.post("/match", scanQueryLimiter, async (req: Request, res: Response) => {
-    const { query } = req.body;
-    if (!query || typeof query !== "string") {
-        res.status(400).json({ error: "query parameter is required and must be a string" });
+    const matchSchema = z.object({ query: z.string() }).strict();
+    const parsed = matchSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({
+            error: "query parameter is required and must be a string or unknown fields present",
+        });
         return;
     }
+    const { query } = parsed.data;
 
     const normalizedQuery = query.trim().toLowerCase();
     const cacheKey = `match_cache:${normalizedQuery}`;
@@ -775,18 +780,16 @@ router.post("/match", scanQueryLimiter, async (req: Request, res: Response) => {
  *         description: Medicine verified successfully
  */
 router.post("/verify-brand", scanQueryLimiter, async (req: Request, res: Response) => {
-    const { brandName } = req.body;
-    if (!brandName || typeof brandName !== "string") {
-        res.status(400).json({ error: "brandName is required and must be a string" });
-        return;
-    }
     const MAX_BRAND_NAME_LENGTH = 200;
-    if (brandName.length > MAX_BRAND_NAME_LENGTH) {
+    const brandSchema = z.object({ brandName: z.string().max(MAX_BRAND_NAME_LENGTH) }).strict();
+    const parsed = brandSchema.safeParse(req.body);
+    if (!parsed.success) {
         res.status(400).json({
-            error: `brandName must not exceed ${MAX_BRAND_NAME_LENGTH} characters`,
+            error: `brandName must be a valid string (max ${MAX_BRAND_NAME_LENGTH} chars) and no unknown fields allowed`,
         });
         return;
     }
+    const { brandName } = parsed.data;
     const normalizedBrand = brandName.trim().toLowerCase();
     const cacheKey = `brand_cache:${normalizedBrand}`;
 
@@ -870,7 +873,7 @@ router.post("/verify-brand", scanQueryLimiter, async (req: Request, res: Respons
     }
 });
 import { idempotencyMiddleware } from "../middleware/idempotency";
-import { resolveConflict } from "../utils/conflictResolution";
+import { resolveConflict, InvalidClientTimestampError } from "../utils/conflictResolution";
 
 router.post(
     "/submit",
@@ -880,11 +883,35 @@ router.post(
     idempotencyMiddleware,
     async (req: Request, res: Response) => {
         const idempotencyKey = (req as any).idempotencyKey;
-        const { deviceId, clientUpdatedAt } = req.body;
+        const submitSchema = z
+            .object({
+                deviceId: z.string().optional(),
+                clientUpdatedAt: z
+                    .string()
+                    .trim()
+                    .min(1, "clientUpdatedAt is required")
+                    .regex(
+                        /^\d+$/,
+                        "clientUpdatedAt must be a numeric timestamp string (milliseconds since epoch)"
+                    ),
+                metadata: z.string().optional(),
+            })
+            .strict();
+
+        const parsedBody = submitSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+            res.status(400).json({
+                error: "Invalid form data or unknown fields",
+                details: parsedBody.error,
+            });
+            return;
+        }
+
+        const { deviceId, clientUpdatedAt } = parsedBody.data;
         let metadata = null;
-        if (req.body.metadata) {
+        if (parsedBody.data.metadata) {
             try {
-                metadata = JSON.parse(req.body.metadata, (key, value) => {
+                metadata = JSON.parse(parsedBody.data.metadata, (key, value) => {
                     if (key === "__proto__" || key === "constructor" || key === "prototype") {
                         return undefined;
                     }
@@ -906,7 +933,7 @@ router.post(
             const resolvedScanId = await resolveConflict({
                 scanId,
                 metadata,
-                deviceId,
+                deviceId: deviceId ?? "",
                 clientUpdatedAt,
                 userId,
             });
@@ -960,15 +987,40 @@ router.post(
                 });
             }
 
-            await supabase
+            const { error: idemUpdateError } = await supabase
                 .from("submission_idempotency")
-                .insert({ idempotency_key: idempotencyKey, scan_id: resolvedScanId });
+                .update({ scan_id: resolvedScanId })
+                .eq("idempotency_key", idempotencyKey);
+
+            if (idemUpdateError) {
+                logger.error("Failed to persist idempotency record", {
+                    error: idemUpdateError,
+                    idempotencyKey,
+                    scanId: resolvedScanId,
+                });
+            }
 
             res.status(200).json(result);
         } catch (err) {
+            if (err instanceof InvalidClientTimestampError) {
+                res.status(400).json({ error: err.message });
+                return;
+            }
             logger.error(
                 `Error during offline scan submit: ${err instanceof Error ? err.message : err}`
             );
+
+            if (idempotencyKey) {
+                try {
+                    await supabase
+                        .from("submission_idempotency")
+                        .delete()
+                        .eq("idempotency_key", idempotencyKey);
+                } catch {
+                    /* best-effort cleanup; ignore secondary failures */
+                }
+            }
+
             res.status(500).json({ error: "Server error during scan submission" });
         }
     }

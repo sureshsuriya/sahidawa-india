@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Copy, Loader2, Plus, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +31,70 @@ type InteractionWarning = {
     source?: string;
 };
 
+const INTERACTIONS_CACHE_TTL_MS = 30_000;
+const INTERACTIONS_REQUEST_DEBOUNCE_MS = 150;
+
+// Compare page supports up to this many medicine slots; URL query params
+// m1..MAX_COMPARE_SLOTS are used to persist/restore the full selection.
+const MAX_COMPARE_SLOTS = 6;
+
+const interactionsCache = new Map<
+    string,
+    { expiresAt: number; interactions: InteractionWarning[] }
+>();
+const interactionsInFlight = new Map<string, Promise<InteractionWarning[]>>();
+
+const severityOrder: Record<InteractionSeverity, number> = {
+    "High Risk": 0,
+    Moderate: 1,
+    Safe: 2,
+};
+
+function sortInteractionWarnings(interactions: InteractionWarning[]) {
+    return [...interactions].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+}
+
+async function fetchInteractionWarnings(
+    selectedIdsKey: string,
+    fallbackErrorMessage: string
+): Promise<InteractionWarning[]> {
+    const now = Date.now();
+    const cached = interactionsCache.get(selectedIdsKey);
+    if (cached && cached.expiresAt > now) {
+        return cached.interactions;
+    }
+
+    const inFlight = interactionsInFlight.get(selectedIdsKey);
+    if (inFlight) return inFlight;
+
+    const params = new URLSearchParams({ ids: selectedIdsKey });
+    const request = fetch(`${API_BASE}/api/v1/interactions?${params.toString()}`)
+        .then(async (response) => {
+            if (!response.ok) {
+                const body = (await response.json().catch(() => ({}))) as { error?: string };
+                throw new Error(body.error ?? fallbackErrorMessage);
+            }
+
+            return response.json() as Promise<{ interactions: InteractionWarning[] }>;
+        })
+        .then((body) => {
+            const interactions = sortInteractionWarnings(body.interactions ?? []);
+            interactionsCache.set(selectedIdsKey, {
+                expiresAt: Date.now() + INTERACTIONS_CACHE_TTL_MS,
+                interactions,
+            });
+            return interactions;
+        })
+        .finally(() => {
+            if (interactionsInFlight.get(selectedIdsKey) === request) {
+                interactionsInFlight.delete(selectedIdsKey);
+            }
+        });
+
+    interactionsInFlight.set(selectedIdsKey, request);
+    return request;
+}
+
 async function searchMedicines(query: string): Promise<Medicine[]> {
     const filter = buildMedicineNameSearchFilter(query);
     if (!filter) return [];
@@ -58,6 +122,7 @@ export default function ComparePage() {
     const [interactions, setInteractions] = useState<InteractionWarning[]>([]);
     const [interactionsLoading, setInteractionsLoading] = useState(false);
     const [interactionsError, setInteractionsError] = useState<string | null>(null);
+    const latestInteractionRequest = useRef(0);
 
     const medicine1 = selectedMedicines[0] ?? null;
     const medicine2 = selectedMedicines[1] ?? null;
@@ -66,12 +131,19 @@ export default function ComparePage() {
         .map((medicine) => medicine.id);
     const selectedIdsKey = selectedIds.join(",");
 
+    // Positional key (keeps empty slots as "") so the URL-sync effect can tell
+    // when a specific slot's medicine actually changed, not just the set of ids.
+    const positionalIdsKey = selectedMedicines.map((medicine) => medicine?.id ?? "").join("|");
+
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
 
-        const ids = Array.from(new Set([params.get("m1"), params.get("m2"), params.get("m3")]))
-            .filter((id): id is string => Boolean(id))
-            .slice(0, 6);
+        const ids = Array.from(
+            new Set(
+                Array.from({ length: MAX_COMPARE_SLOTS }, (_, i) => params.get(`m${i + 1}`))
+                    .filter((id): id is string => Boolean(id))
+            )
+        ).slice(0, MAX_COMPARE_SLOTS);
 
         if (ids.length < 2) return;
 
@@ -97,85 +169,79 @@ export default function ComparePage() {
         loadMedicines();
     }, []);
 
-    // Keep URL in sync with the currently selected medicines so
-    // browser back/navigation preserves the comparison workflow.
+    // Keep URL in sync with ALL currently selected medicines (up to
+    // MAX_COMPARE_SLOTS) so refreshing or sharing the link restores every
+    // slot, not just the first two.
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
 
-        const nextM1 = medicine1?.id ?? "";
-        const nextM2 = medicine2?.id ?? "";
+        const ids = selectedMedicines.map((medicine) => medicine?.id ?? "");
+        const filledCount = ids.filter(Boolean).length;
 
-        const currentM1 = params.get("m1") ?? "";
-        const currentM2 = params.get("m2") ?? "";
+        let changed = false;
+        for (let i = 0; i < MAX_COMPARE_SLOTS; i++) {
+            const key = `m${i + 1}`;
+            const value = ids[i] ?? "";
+            const shouldHaveValue = filledCount >= 2 && Boolean(value);
+
+            if (!shouldHaveValue) {
+                if (params.has(key)) {
+                    params.delete(key);
+                    changed = true;
+                }
+                continue;
+            }
+
+            if (params.get(key) !== value) {
+                params.set(key, value);
+                changed = true;
+            }
+        }
 
         // Only update when something actually changes to avoid extra history churn.
-        if (currentM1 === nextM1 && currentM2 === nextM2) return;
-
-        if (!nextM1 || !nextM2) {
-            params.delete("m1");
-            params.delete("m2");
-        } else {
-            params.set("m1", nextM1);
-            params.set("m2", nextM2);
-        }
+        if (!changed) return;
 
         const qs = params.toString();
         const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
         window.history.replaceState({}, "", newUrl);
-    }, [medicine1?.id, medicine2?.id]);
+    }, [positionalIdsKey]);
 
     useEffect(() => {
         if (selectedIds.length < 2) {
+            latestInteractionRequest.current += 1;
             setInteractions([]);
             setInteractionsError(null);
             setInteractionsLoading(false);
             return;
         }
 
-        const controller = new AbortController();
-        const params = new URLSearchParams({ ids: selectedIdsKey });
+        const requestId = latestInteractionRequest.current + 1;
+        latestInteractionRequest.current = requestId;
 
-        setInteractionsLoading(true);
-        setInteractionsError(null);
+        const timeoutId = window.setTimeout(() => {
+            setInteractionsLoading(true);
+            setInteractionsError(null);
 
-        fetch(`${API_BASE}/api/v1/interactions?${params.toString()}`, {
-            signal: controller.signal,
-        })
-            .then(async (response) => {
-                if (!response.ok) {
-                    const body = (await response.json().catch(() => ({}))) as { error?: string };
-                    throw new Error(body.error ?? tInteractions("errorMessage"));
-                }
+            fetchInteractionWarnings(selectedIdsKey, tInteractions("errorMessage"))
+                .then((nextInteractions) => {
+                    if (latestInteractionRequest.current !== requestId) return;
+                    setInteractions(nextInteractions);
+                })
+                .catch((error: unknown) => {
+                    if (latestInteractionRequest.current !== requestId) return;
+                    setInteractions([]);
+                    setInteractionsError(
+                        error instanceof Error ? error.message : tInteractions("errorMessage")
+                    );
+                })
+                .finally(() => {
+                    if (latestInteractionRequest.current === requestId) {
+                        setInteractionsLoading(false);
+                    }
+                });
+        }, INTERACTIONS_REQUEST_DEBOUNCE_MS);
 
-                return response.json() as Promise<{ interactions: InteractionWarning[] }>;
-            })
-            .then((body) => {
-                const severityOrder: Record<InteractionSeverity, number> = {
-                    "High Risk": 0,
-                    Moderate: 1,
-                    Safe: 2,
-                };
-
-                setInteractions(
-                    [...(body.interactions ?? [])].sort(
-                        (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
-                    )
-                );
-            })
-            .catch((error: unknown) => {
-                if (error instanceof DOMException && error.name === "AbortError") return;
-                setInteractions([]);
-                setInteractionsError(
-                    error instanceof Error ? error.message : tInteractions("errorMessage")
-                );
-            })
-            .finally(() => {
-                if (!controller.signal.aborted) {
-                    setInteractionsLoading(false);
-                }
-            });
-
-        return () => controller.abort();
+        return () => window.clearTimeout(timeoutId);
     }, [selectedIds.length, selectedIdsKey]);
 
     const handleCopy = (text: string) => {

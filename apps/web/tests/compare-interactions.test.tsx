@@ -34,6 +34,24 @@ const medicines: Record<string, Medicine> = {
     },
 };
 
+function setMedicineIds(first: string, second: string, third: string) {
+    medicines["First medicine"].id = first;
+    medicines["Second medicine"].id = second;
+    medicines["Search Medicine 3"].id = third;
+}
+
+function createDeferredResponse(body: unknown) {
+    let resolve!: (response: Response) => void;
+    const promise = new Promise<Response>((promiseResolve) => {
+        resolve = promiseResolve;
+    });
+
+    return {
+        promise,
+        resolve: () => resolve(jsonResponse(body)),
+    };
+}
+
 const queryBuilder = {
     select: jest.fn(),
     or: jest.fn(),
@@ -124,6 +142,9 @@ function jsonResponse(body: unknown, status = 200) {
 
 describe("ComparePage interaction warnings", () => {
     beforeEach(() => {
+        setMedicineIds("med-a", "med-b", "med-c");
+        window.history.replaceState({}, "", "/en/compare");
+
         queryBuilder.select.mockReturnValue(queryBuilder);
         queryBuilder.or.mockReturnValue(queryBuilder);
         queryBuilder.limit.mockResolvedValue({ data: [], error: null });
@@ -196,5 +217,98 @@ describe("ComparePage interaction warnings", () => {
         expect(screen.getByText("All clear!")).toBeInTheDocument();
         expect(screen.getByText("Crocin + Warfarin")).toBeInTheDocument();
         expect(screen.getByText("Monitor INR and bleeding symptoms.")).toBeInTheDocument();
+    });
+
+    it("keeps stale interaction responses from replacing the latest selection", async () => {
+        setMedicineIds("stale-a", "stale-b", "stale-c");
+
+        const firstResponse = createDeferredResponse({
+            interactions: [
+                {
+                    medicineAId: "stale-a",
+                    medicineBId: "stale-b",
+                    drugA: "Crocin",
+                    drugB: "Warfarin",
+                    severity: "High Risk",
+                    sideEffects: "Outdated warning.",
+                },
+            ],
+        });
+        const latestResponse = createDeferredResponse({
+            interactions: [
+                {
+                    medicineAId: "stale-b",
+                    medicineBId: "stale-c",
+                    drugA: "Warfarin",
+                    drugB: "Brufen",
+                    severity: "Moderate",
+                    sideEffects: "Latest warning.",
+                },
+            ],
+        });
+
+        (global.fetch as jest.Mock)
+            .mockReturnValueOnce(firstResponse.promise)
+            .mockReturnValueOnce(latestResponse.promise);
+
+        render(<ComparePage />);
+
+        fireEvent.click(screen.getByRole("button", { name: "Select First medicine" }));
+        fireEvent.click(screen.getByRole("button", { name: "Select Second medicine" }));
+
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+
+        fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+        fireEvent.click(screen.getByRole("button", { name: "Select Search Medicine 3" }));
+
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+
+        latestResponse.resolve();
+        expect(await screen.findByText("Latest warning.")).toBeInTheDocument();
+
+        firstResponse.resolve();
+        await waitFor(() =>
+            expect(screen.queryByText("Outdated warning.")).not.toBeInTheDocument()
+        );
+        expect(screen.getByText("Latest warning.")).toBeInTheDocument();
+    });
+
+    it("uses the short-lived cache for identical selection keys", async () => {
+        setMedicineIds("cache-a", "cache-b", "cache-c");
+
+        const response = createDeferredResponse({
+            interactions: [
+                {
+                    medicineAId: "cache-a",
+                    medicineBId: "cache-b",
+                    drugA: "Crocin",
+                    drugB: "Warfarin",
+                    severity: "High Risk",
+                    sideEffects: "Cached warning.",
+                },
+            ],
+        });
+
+        (global.fetch as jest.Mock).mockReturnValueOnce(response.promise);
+
+        const { unmount } = render(<ComparePage />);
+
+        fireEvent.click(screen.getByRole("button", { name: "Select First medicine" }));
+        fireEvent.click(screen.getByRole("button", { name: "Select Second medicine" }));
+
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+
+        response.resolve();
+        expect(await screen.findByText("Cached warning.")).toBeInTheDocument();
+
+        unmount();
+        window.history.replaceState({}, "", "/en/compare");
+        render(<ComparePage />);
+
+        fireEvent.click(screen.getByRole("button", { name: "Select First medicine" }));
+        fireEvent.click(screen.getByRole("button", { name: "Select Second medicine" }));
+
+        expect(await screen.findByText("Cached warning.")).toBeInTheDocument();
+        expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 });

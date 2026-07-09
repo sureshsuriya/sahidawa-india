@@ -1,14 +1,13 @@
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || "http://localhost:54321";
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "test-anon-key";
 
-(global as any).WebSocket = (global as any).WebSocket || class {};
-
-jest.mock("csrf-csrf", () => ({
-    doubleCsrf: () => ({
-        doubleCsrfProtection: (_req: any, _res: any, next: any) => next(),
-        generateToken: () => "mocked-csrf-token",
+jest.mock(
+    "rate-limit-redis",
+    () => ({
+        RedisStore: jest.fn(),
     }),
-}));
+    { virtual: true }
+);
 
 const mockSupabaseChain = {
     from: jest.fn().mockReturnThis(),
@@ -33,6 +32,18 @@ jest.mock("../src/db/client", () => ({
     supabase: mockSupabaseChain,
 }));
 
+const mockRedisClient = {
+    isOpen: false,
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+    scanIterator: jest.fn(() => (async function* () {})()),
+};
+
+jest.mock("../src/utils/redis", () => ({
+    redisClient: mockRedisClient,
+}));
+
 jest.mock("../src/middleware/auth", () => ({
     requireAuth: (req: any, _res: any, next: any) => {
         req.user = { id: "test-user-id", email: "test@example.com", role: "user" };
@@ -47,12 +58,40 @@ jest.mock("../src/middleware/auth", () => ({
 }));
 
 import request from "supertest";
-import app from "../src/app";
+import express from "express";
+import medicineSchedulesRouter from "../src/routes/medicineSchedules";
+import { redisClient } from "../src/utils/redis";
+
+const app = express();
+app.use(express.json());
+app.use("/api/schedules", medicineSchedulesRouter);
 
 const mockedSupabase = mockSupabaseChain as jest.Mocked<typeof mockSupabaseChain>;
 
 beforeEach(() => {
     jest.clearAllMocks();
+    Object.values(mockedSupabase).forEach((value) => {
+        if (jest.isMockFunction(value)) {
+            value.mockReset();
+        }
+    });
+    mockedSupabase.from.mockReturnValue(mockedSupabase);
+    mockedSupabase.select.mockReturnValue(mockedSupabase);
+    mockedSupabase.insert.mockReturnValue(mockedSupabase);
+    mockedSupabase.update.mockReturnValue(mockedSupabase);
+    mockedSupabase.delete.mockReturnValue(mockedSupabase);
+    mockedSupabase.upsert.mockReturnValue(mockedSupabase);
+    mockedSupabase.eq.mockReturnValue(mockedSupabase);
+    mockedSupabase.order.mockReturnValue(mockedSupabase);
+    mockedSupabase.gte.mockReturnValue(mockedSupabase);
+    mockedSupabase.lte.mockReturnValue(mockedSupabase);
+    mockedSupabase.or.mockReturnValue(mockedSupabase);
+    mockedSupabase.in.mockReturnValue(mockedSupabase);
+    (redisClient as any).isOpen = false;
+    (redisClient.get as jest.Mock).mockResolvedValue(null);
+    (redisClient.set as jest.Mock).mockResolvedValue("OK");
+    (redisClient.del as jest.Mock).mockResolvedValue(1);
+    (redisClient.scanIterator as jest.Mock).mockReturnValue((async function* () {})());
 });
 
 afterEach(() => {
@@ -237,7 +276,10 @@ describe("DELETE /api/schedules/:id", () => {
         (mockedSupabase.from as jest.Mock).mockReturnValue(mockedSupabase);
         (mockedSupabase.delete as jest.Mock).mockReturnValue(mockedSupabase);
         (mockedSupabase.eq as jest.Mock).mockReturnValue(mockedSupabase);
-        mockedSupabase.error = null;
+        (mockedSupabase.select as jest.Mock).mockResolvedValue({
+            data: [{ id: "00000000-0000-4000-8000-000000000001" }],
+            error: null,
+        });
 
         const res = await request(app)
             .delete("/api/schedules/00000000-0000-4000-8000-000000000001")
@@ -245,6 +287,42 @@ describe("DELETE /api/schedules/:id", () => {
 
         expect(res.status).toBe(200);
         expect(res.body.success).toBe(true);
+        expect(mockedSupabase.select).toHaveBeenCalledWith("id");
+    });
+
+    it("returns 404 when no matching schedule is deleted", async () => {
+        (mockedSupabase.from as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.delete as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.select as jest.Mock).mockResolvedValue({
+            data: [],
+            error: null,
+        });
+
+        const res = await request(app)
+            .delete("/api/schedules/00000000-0000-4000-8000-000000000999")
+            .set("Authorization", "Bearer test-token");
+
+        expect(res.status).toBe(404);
+        expect(res.body.error).toBe("Schedule not found");
+    });
+
+    it("returns 404 when a schedule is not owned by the user", async () => {
+        (mockedSupabase.from as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.delete as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.select as jest.Mock).mockResolvedValue({
+            data: [],
+            error: null,
+        });
+
+        const res = await request(app)
+            .delete("/api/schedules/00000000-0000-4000-8000-000000000002")
+            .set("Authorization", "Bearer test-token");
+
+        expect(res.status).toBe(404);
+        expect(res.body.error).toBe("Schedule not found");
+        expect(mockedSupabase.eq).toHaveBeenCalledWith("user_id", "test-user-id");
     });
 });
 
@@ -283,6 +361,57 @@ describe("POST /api/schedules/:id/doses", () => {
 
         expect(res.status).toBe(200);
         expect(res.body.dose.status).toBe("taken");
+    });
+
+    it("invalidates all bucketed summary caches after logging a dose", async () => {
+        (redisClient as any).isOpen = true;
+        (redisClient.scanIterator as jest.Mock).mockReturnValue(
+            (async function* () {
+                yield "schedules:summary:test-user-id:2026-06-10:96";
+                yield "schedules:summary:test-user-id:2026-06-10:97";
+            })()
+        );
+
+        const doseEntry = {
+            id: "dose-1",
+            schedule_id: "sched-1",
+            user_id: "test-user-id",
+            log_date: "2026-06-10",
+            log_time: "08:00",
+            status: "taken",
+            taken_at: null,
+            created_at: "2026-06-10T08:05:00Z",
+        };
+
+        (mockedSupabase.from as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.select as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValue(mockedSupabase);
+        mockedSupabase.maybeSingle.mockResolvedValueOnce({
+            data: { id: "sched-1" },
+            error: null,
+        });
+        mockedSupabase.single.mockResolvedValue({ data: doseEntry, error: null });
+
+        const res = await request(app)
+            .post("/api/schedules/00000000-0000-4000-8000-000000000001/doses")
+            .set("Authorization", "Bearer test-token")
+            .send({
+                log_date: "2026-06-10",
+                log_time: "08:00",
+                status: "taken",
+            });
+
+        expect(res.status).toBe(200);
+        expect(redisClient.scanIterator).toHaveBeenCalledWith({
+            MATCH: "schedules:summary:test-user-id:*",
+            COUNT: 100,
+        });
+        expect(redisClient.del).toHaveBeenCalledWith(
+            "schedules:summary:test-user-id:2026-06-10:96"
+        );
+        expect(redisClient.del).toHaveBeenCalledWith(
+            "schedules:summary:test-user-id:2026-06-10:97"
+        );
     });
 });
 
@@ -400,6 +529,60 @@ describe("GET /api/schedules/today/summary", () => {
             { time: "08:00", status: "upcoming" },
         ]);
         jest.useRealTimers();
+    });
+
+    it("uses a 5-minute time bucket and short TTL for Redis summary cache", async () => {
+        (redisClient as any).isOpen = true;
+        (redisClient.get as jest.Mock).mockResolvedValue(null);
+
+        const activeSchedules = [
+            {
+                id: "sched-1",
+                medicine_name: "Paracetamol",
+                dosage: "1 tablet",
+                times: ["01:00", "08:00"],
+                frequency: 2,
+                user_id: "test-user-id",
+                start_date: "2026-06-14",
+                end_date: null,
+                notes: null,
+                is_active: true,
+                created_at: "2026-06-14T00:00:00Z",
+                updated_at: "2026-06-14T00:00:00Z",
+            },
+        ];
+
+        (mockedSupabase.from as jest.Mock).mockReturnValue(mockedSupabase);
+        (mockedSupabase.select as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.lte as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.or as jest.Mock).mockResolvedValueOnce({
+            data: activeSchedules,
+            error: null,
+        });
+
+        (mockedSupabase.select as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.in as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockReturnValueOnce(mockedSupabase);
+        (mockedSupabase.eq as jest.Mock).mockResolvedValueOnce({
+            data: [],
+            error: null,
+        });
+
+        const res = await request(app)
+            .get("/api/schedules/today/summary?date=2026-06-14&time=01:34")
+            .set("Authorization", "Bearer test-token");
+
+        expect(res.status).toBe(200);
+        expect(redisClient.get).toHaveBeenCalledWith(
+            "schedules:summary:test-user-id:2026-06-14:18"
+        );
+        expect(redisClient.set).toHaveBeenCalledWith(
+            "schedules:summary:test-user-id:2026-06-14:18",
+            expect.any(String),
+            { EX: 300 }
+        );
     });
 });
 

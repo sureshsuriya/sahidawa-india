@@ -13,6 +13,15 @@ import { Pill, AlertCircle, DollarSign, Calendar, MapPin, ArrowRight } from "luc
 import GenericAlternativeCard from "@/components/GenericAlternativeCard";
 import GenericAlternativeCardSkeleton from "@/components/GenericAlternativeCardSkeleton";
 
+const INR_FORMATTER = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+});
+
+function formatINR(value: number): string {
+    return INR_FORMATTER.format(value);
+}
+
 async function searchMedicines(query: string): Promise<Medicine[]> {
     const q = query.trim();
     if (q.length < 2) return [];
@@ -227,14 +236,14 @@ function CalculatorPageContent() {
     const yearlySavings = monthlySavings * 12;
 
     return (
-        <div className="min-h-screen bg-(--color-surface-muted) text-(--color-text-primary)">
+        <div className="min-h-[100dvh] bg-(--color-surface-muted) text-(--color-text-primary)">
             <PageHeader
                 title={translate("pageTitle")}
                 subtitle={translate("pageSubtitle")}
                 backHref="/"
                 variant="light"
             />
-            <main className="container mx-auto max-w-2xl space-y-6 px-4 py-8">
+            <main className="container mx-auto max-w-2xl space-y-6 px-4 py-8 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
                 {/* Search Panel */}
                 <section className="rounded-2xl border border-(--color-border-muted) bg-(--color-surface-page) p-6 shadow-sm">
                     <MedicineSearchSelect
@@ -339,7 +348,7 @@ function CalculatorPageContent() {
                                         {translate("perPurchaseSavings")}
                                     </span>
                                     <span className="mt-1 block text-lg font-black text-slate-800 dark:text-slate-200">
-                                        Γé╣{savingsPerPurchase.toFixed(2)}
+                                        {formatINR(savingsPerPurchase)}
                                     </span>
                                 </div>
 
@@ -349,7 +358,7 @@ function CalculatorPageContent() {
                                         {translate("monthlySavings")}
                                     </span>
                                     <span className="mt-1 block text-xl font-extrabold text-emerald-700 dark:text-emerald-400">
-                                        Γé╣{monthlySavings.toFixed(2)}
+                                        {formatINR(monthlySavings)}
                                     </span>
                                 </div>
 
@@ -359,7 +368,7 @@ function CalculatorPageContent() {
                                         {translate("yearlySavings")}
                                     </span>
                                     <span className="mt-1 block text-xl font-extrabold text-teal-700 dark:text-teal-400">
-                                        Γé╣{yearlySavings.toFixed(2)}
+                                        {formatINR(yearlySavings)}
                                     </span>
                                 </div>
                             </div>
@@ -370,7 +379,7 @@ function CalculatorPageContent() {
                                     <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                                         <span>{translate("costPerMonthBrand")}</span>
                                         <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                                            Γé╣{brandMonthlyCost.toFixed(2)}
+                                            {formatINR(brandMonthlyCost)}
                                         </span>
                                     </div>
                                     <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800">
@@ -385,7 +394,7 @@ function CalculatorPageContent() {
                                     <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                                         <span>{translate("costPerMonthGeneric")}</span>
                                         <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                                            Γé╣{genericMonthlyCost.toFixed(2)}
+                                            {formatINR(genericMonthlyCost)}
                                         </span>
                                     </div>
                                     <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800">
@@ -405,7 +414,7 @@ function CalculatorPageContent() {
                                     <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                                         <span>{translate("costPerMonthJanAushadhi")}</span>
                                         <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                                            Γé╣{janAushadhiMonthlyCost.toFixed(2)}
+                                            {formatINR(janAushadhiMonthlyCost)}
                                         </span>
                                     </div>
                                     <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800">

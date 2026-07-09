@@ -29,6 +29,7 @@ from services.telemetry import (
     log_transcription_finished,
     start_timer,
 )
+from utils.audio_upload import read_audio_upload_limited
 
 logger = logging.getLogger(__name__)
 telemetry_logger = get_telemetry_logger()
@@ -890,7 +891,7 @@ async def transcribe_audio(
     Returns transcription text, detected language code, language confidence,
     the echoed filename, and any extracted medicine entities.
     """
-    contents = await file.read()
+    contents = await read_audio_upload_limited(file)
     original_name = file.filename or "upload"
     return transcribe_uploaded_bytes(
         contents,

@@ -11,14 +11,43 @@ import {
     type MedicineMatch,
 } from "../services/medicineRag.service";
 import { PharmacyRpcResult, FormattedPharmacy } from "../types/pharmacy.types";
+import { z } from "zod";
+import { medicineQueryResponseSchema, recommendResponseSchema } from "./triage.schemas";
 
 const router = Router();
+
+/**
+ * Validates an assembled triage response against its schema before sending it.
+ * If the payload does not conform (e.g. an upstream source returned an
+ * unexpected shape), it logs the mismatch and returns a 502 rather than
+ * forwarding a malformed body to the client.
+ */
+function sendValidatedResponse<T>(
+    res: Response,
+    route: string,
+    schema: z.ZodType<T>,
+    payload: unknown
+): void {
+    const result = schema.safeParse(payload);
+    if (!result.success) {
+        logger.error("Triage response failed schema validation", {
+            route,
+            issues: result.error.flatten(),
+        });
+        res.status(502).json({
+            error: "Triage service produced an invalid response.",
+        });
+        return;
+    }
+    res.json(result.data);
+}
 
 /** Maximum number of pharmacies returned alongside a recommendation. */
 const MAX_PHARMACY_RESULTS = 5;
 
 function formatPharmacy(p: PharmacyRpcResult): FormattedPharmacy {
     return {
+        id: p.id,
         name: p.name || "Unknown Pharmacy",
         address: p.address || "Unknown Address",
         lat: p.lat,
@@ -109,7 +138,7 @@ router.post(
             const { query, limit } = parsed.data;
             const medicines = await retrieveRelevantMedicines(query, limit);
 
-            res.json({
+            sendValidatedResponse(res, "/medicine-query", medicineQueryResponseSchema, {
                 query,
                 medicines,
                 disclaimer: MEDICINE_RAG_DISCLAIMER,
@@ -188,7 +217,7 @@ router.post(
                     ? await findNearestPharmacies(lat, lng, radius)
                     : [];
 
-            res.json({
+            sendValidatedResponse(res, "/recommend", recommendResponseSchema, {
                 symptoms,
                 emergency: urgency.emergency,
                 urgentKeywords: urgency.matched,

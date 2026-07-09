@@ -1,3 +1,5 @@
+import type { VerifiedPharmacy } from "@sahidawa/types";
+
 /** Pharmacy row as returned by the get_nearest_pharmacies RPC. */
 export interface PharmacyRpcResult {
     id?: string;
@@ -18,20 +20,4 @@ export interface PharmacyRpcResult {
 }
 
 /** Formatted pharmacy object returned in triage responses. */
-export interface FormattedPharmacy {
-    id?: string;
-    name: string;
-    address: string;
-    lat: number;
-    lng: number;
-    distance: string;
-    phone_number: string | null;
-    is_verified: boolean;
-    district: string | null;
-    state: string | null;
-    updated_at?: string;
-    is_active?: boolean;
-    deleted_at?: string | null;
-    operating_hours?: string | null;
-    timezone?: string | null;
-}
+export type FormattedPharmacy = VerifiedPharmacy;

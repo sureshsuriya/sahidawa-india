@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
+import { usePredictivePrefetch } from "@/src/hooks/usePredictivePrefetch";
+
 interface Pharmacy {
     id: number;
     name: string;
@@ -49,83 +51,77 @@ export default function MapView() {
     const abortControllerRef = useRef<AbortController | null>(null);
     const decodeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+    // Function to load map data
+    const loadForCoords = async (lat: number, lng: number) => {
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(`/api/map/nearby?lat=${lat}&lng=${lng}&radius_km=10`, {
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(`Map API error: ${res.status} ${text}`);
+            }
+            const data = await res.json();
+
+            // Normalize and decode incoming data once to avoid per-render DOM decoding
+            const normalizedPharmacies: Pharmacy[] = Array.isArray(data.pharmacies)
+                ? data.pharmacies.map((p: Pharmacy) => ({
+                      ...p,
+                      name: decodeHtmlEntities(p.name),
+                      address: decodeHtmlEntities(p.address),
+                  }))
+                : [];
+
+            const normalizedAsha: AshaWorker[] = Array.isArray(data.asha_workers)
+                ? data.asha_workers.map((a: AshaWorker) => ({
+                      ...a,
+                      name: decodeHtmlEntities(a.name),
+                  }))
+                : [];
+
+            if (abortControllerRef.current === controller) {
+                setPharmacies(normalizedPharmacies);
+                setAshaWorkers(normalizedAsha);
+            }
+        } catch (err) {
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+                console.error("[MapView] Error loading nearby map data:", err);
+                setError("Unable to load nearby map data.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Use the hook to prefetch data when the map enters the viewport
+    const mapContainerRef = usePredictivePrefetch({
+        preloadQuery: async () => {
+            if (userLocation) await loadForCoords(userLocation[0], userLocation[1]);
+        },
+        threshold: 0.2,
+    });
+
     useEffect(() => {
         let mounted = true;
-
-        async function loadForCoords(lat: number, lng: number) {
-            // abort previous
-            abortControllerRef.current?.abort();
-            const controller = new AbortController();
-            // store controller on the ref
-            abortControllerRef.current = controller;
-
-            setLoading(true);
-            setError(null);
-
-            try {
-                const res = await fetch(`/api/map/nearby?lat=${lat}&lng=${lng}&radius_km=10`, {
-                    signal: controller.signal,
-                });
-
-                if (!res.ok) {
-                    const text = await res.text().catch(() => "");
-                    throw new Error(`Map API error: ${res.status} ${text}`);
-                }
-
-                const data = await res.json();
-
-                if (!mounted) return;
-
-                // Normalize and decode incoming data once to avoid per-render DOM decoding
-                const normalizedPharmacies: Pharmacy[] = Array.isArray(data.pharmacies)
-                    ? data.pharmacies.map((p: Pharmacy) => ({
-                          ...p,
-                          name: decodeHtmlEntities(p.name),
-                          address: decodeHtmlEntities(p.address),
-                      }))
-                    : [];
-
-                const normalizedAsha: AshaWorker[] = Array.isArray(data.asha_workers)
-                    ? data.asha_workers.map((a: AshaWorker) => ({
-                          ...a,
-                          name: decodeHtmlEntities(a.name),
-                      }))
-                    : [];
-
-                // Only apply results if this controller is still the latest
-                if (abortControllerRef.current === controller) {
-                    setPharmacies(normalizedPharmacies);
-                    setAshaWorkers(normalizedAsha);
-                }
-            } catch (err: unknown) {
-                if (err instanceof DOMException && err.name === "AbortError") return;
-                console.error("[MapView] Error loading nearby map data:", err);
-                if (mounted && abortControllerRef.current === controller) {
-                    setError("Unable to load nearby map data.");
-                }
-            } finally {
-                if (mounted && abortControllerRef.current === controller) {
-                    setLoading(false);
-                }
-            }
-        }
-
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                const { latitude: lat, longitude: lng } = pos.coords;
                 if (!mounted) return;
+                const { latitude: lat, longitude: lng } = pos.coords;
                 setUserLocation([lat, lng]);
                 void loadForCoords(lat, lng);
             },
             () => {
-                // fallback: default to Pune
-                const fallback: [number, number] = [18.5204, 73.8567];
                 if (!mounted) return;
+                const fallback: [number, number] = [18.5204, 73.8567];
                 setUserLocation(fallback);
                 void loadForCoords(fallback[0], fallback[1]);
             }
         );
-
         return () => {
             mounted = false;
             abortControllerRef.current?.abort();
@@ -196,57 +192,61 @@ export default function MapView() {
                 </div>
             </div>
 
-            {/* Map */}
-            <MapContainer
-                center={userLocation}
-                zoom={13}
-                style={{ height: "500px", width: "100%" }}
-            >
-                <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-                />
+            {/* Map Container with the ref applied */}
+            <div ref={mapContainerRef as any}>
+                <MapContainer
+                    center={userLocation}
+                    zoom={13}
+                    style={{ height: "500px", width: "100%" }}
+                >
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+                    />
 
-                {showPharmacies &&
-                    pharmacies.map((p) => (
-                        <Marker
-                            key={`ph-${p.id}`}
-                            position={[p.lat, p.lng]}
-                            icon={p.type === "Jan Aushadhi" ? greenIcon : orangeIcon}
-                        >
-                            <Popup>
-                                <strong>{p.name}</strong>
-                                <br />
-                                <strong>Type:</strong> {p.type}
-                                <br />
-                                <div className="flex items-center gap-1">
-                                    <span>Address: {p.address}</span>
-                                    <CopyButton text={p.address} className="h-4 w-4" />
-                                </div>
-                                Distance: {p.distance_km} km
-                                <br />
-                                {p.verified && <span className="text-green-600">✅ Verified</span>}
-                            </Popup>
-                        </Marker>
-                    ))}
+                    {showPharmacies &&
+                        pharmacies.map((p) => (
+                            <Marker
+                                key={`ph-${p.id}`}
+                                position={[p.lat, p.lng]}
+                                icon={p.type === "Jan Aushadhi" ? greenIcon : orangeIcon}
+                            >
+                                <Popup>
+                                    <strong>{p.name}</strong>
+                                    <br />
+                                    <strong>Type:</strong> {p.type}
+                                    <br />
+                                    <div className="flex items-center gap-1">
+                                        <span>Address: {p.address}</span>
+                                        <CopyButton text={p.address} className="h-4 w-4" />
+                                    </div>
+                                    Distance: {p.distance_km} km
+                                    <br />
+                                    {p.verified && (
+                                        <span className="text-green-600">✅ Verified</span>
+                                    )}
+                                </Popup>
+                            </Marker>
+                        ))}
 
-                {showAsha &&
-                    ashaWorkers.map((a) => (
-                        <Marker key={`asha-${a.id}`} position={[a.lat, a.lng]} icon={blueIcon}>
-                            <Popup>
-                                <strong>{a.name}</strong>
-                                <br />
-                                District: {a.district}
-                                <br />
-                                <div className="flex items-center gap-1">
-                                    <span>Contact: {a.contact}</span>
-                                    <CopyButton text={a.contact} className="h-4 w-4" />
-                                </div>
-                                Distance: {a.distance_km} km
-                            </Popup>
-                        </Marker>
-                    ))}
-            </MapContainer>
+                    {showAsha &&
+                        ashaWorkers.map((a) => (
+                            <Marker key={`asha-${a.id}`} position={[a.lat, a.lng]} icon={blueIcon}>
+                                <Popup>
+                                    <strong>{a.name}</strong>
+                                    <br />
+                                    District: {a.district}
+                                    <br />
+                                    <div className="flex items-center gap-1">
+                                        <span>Contact: {a.contact}</span>
+                                        <CopyButton text={a.contact} className="h-4 w-4" />
+                                    </div>
+                                    Distance: {a.distance_km} km
+                                </Popup>
+                            </Marker>
+                        ))}
+                </MapContainer>
+            </div>
         </div>
     );
 }

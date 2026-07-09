@@ -4,6 +4,14 @@ import { Bell, BellOff, Download, FileText, Printer, ScanLine, Upload, X } from 
 
 import { parseLocalDate } from "./dateUtils";
 
+const safeT = (nsT: (k: string) => string, key: string, fallback: string) => {
+    try {
+        return nsT(key);
+    } catch {
+        return fallback;
+    }
+};
+
 interface ExpiryFormProps {
     t: (key: string) => string;
     editingId: string | null;
@@ -203,7 +211,7 @@ export function ExpiryForm({
                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                                 />
                             </svg>
-                            {t("saving") || "Saving..."}
+                            {safeT(t, "saving", "Saving...")}
                         </span>
                     ) : editingId ? (
                         t("saveChanges")

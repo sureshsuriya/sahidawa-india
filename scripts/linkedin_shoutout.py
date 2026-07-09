@@ -10,8 +10,9 @@ Flow:
   5. Make.com posts it to LinkedIn Company Page (no Advertising API needed)
 
 Environment Variables Required (set as GitHub Secrets):
-  - MAKE_WEBHOOK_URL  : Make.com webhook URL (https://hook.eu1.make.com/...)
-  - GEMINI_API_KEY    : Google Gemini API key
+  - LINKEDIN_ACCESS_TOKEN : LinkedIn OAuth 2.0 Access Token
+  - LINKEDIN_ORG_ID       : LinkedIn Organization/Company ID (e.g. 12345678)
+  - GEMINI_API_KEY        : Google Gemini API key
   - PR_TITLE          : Title of the merged PR
   - PR_AUTHOR         : GitHub username of the contributor
   - PR_URL            : URL of the merged PR
@@ -80,8 +81,8 @@ def determine_tier(labels_str: str) -> tuple:
 def validate_pr_size(pr: dict) -> None:
     """
     Validates if the PR is substantial enough to warrant a shoutout.
-    - level:critical requires at least 300 lines changed.
-    - level:advanced requires at least 200 lines changed.
+    - level:critical requires at least 100 lines changed.
+    - level:advanced requires at least 150 lines changed.
     """
     labels = [lbl.strip().lower() for lbl in pr["labels"].split(",")]
     try:
@@ -93,7 +94,7 @@ def validate_pr_size(pr: dict) -> None:
     is_advanced = "level:advanced" in labels
 
     # If somehow both or neither are there, default to advanced threshold
-    threshold = 300 if is_critical else 200
+    threshold = 100 if is_critical else 150
     tier_name = "Critical" if is_critical else "Advanced"
 
     if lines_changed < threshold:
@@ -531,129 +532,141 @@ def assemble_final_post(ai_content: str, pr: dict) -> str:
     )
 
 
-def crop_and_upload_og_image(pr: dict) -> str:
+def crop_and_upload_to_linkedin(pr: dict, access_token: str, org_id: str) -> str:
+    """
+    Downloads GitHub OG image, crops the bottom bar, and uploads directly to LinkedIn natively.
+    Returns the LinkedIn Asset URN.
+    """
     fallback_url = f"https://opengraph.githubassets.com/1/{pr['repo']}/pull/{pr['number']}"
+    img_data = None
     try:
         from PIL import Image
         from io import BytesIO
         
         print(f"📥 Downloading GitHub OG image: {fallback_url}")
         res = requests.get(fallback_url, timeout=15)
-        if res.status_code != 200:
-            print(f"⚠️ Failed to download GitHub OG image. Code: {res.status_code}. Using uncropped URL.")
-            return fallback_url
+        if res.status_code == 200:
+            img = Image.open(BytesIO(res.content))
+            w, h = img.size
+            print(f"📏 Original image size: {w}x{h}")
             
-        img = Image.open(BytesIO(res.content))
-        w, h = img.size
-        print(f"📏 Original image size: {w}x{h}")
-        
-        # Crop the bottom 24 pixels (the colored language bar)
-        cropped_img = img.crop((0, 0, w, h - 24))
-        
-        img_buffer = BytesIO()
-        cropped_img.save(img_buffer, "PNG")
-        img_data = img_buffer.getvalue()
-        
-        # Upload to Catbox
-        print("📤 Uploading cropped image to Catbox...")
-        try:
-            files = {
-                'reqtype': (None, 'fileupload'),
-                'fileToUpload': ('shoutout.png', img_data, 'image/png')
-            }
-            res = requests.post('https://catbox.moe/user/api.php', files=files, timeout=15)
-            if res.status_code == 200 and "files.catbox.moe" in res.text:
-                uploaded_url = res.text.strip()
-                print(f"✅ Successfully uploaded to Catbox: {uploaded_url}")
-                return uploaded_url
-        except Exception as ce:
-            print(f"⚠️ Catbox upload failed ({ce}). Trying tmpfiles.org fallback...")
-
-        # Upload to tmpfiles.org
-        try:
-            files = {
-                'file': ('shoutout.png', img_data, 'image/png')
-            }
-            res = requests.post('https://tmpfiles.org/api/v1/upload', files=files, timeout=15)
-            if res.status_code == 200:
-                json_resp = res.json()
-                if json_resp.get("status") == "success":
-                    raw_url = json_resp["data"]["url"]
-                    uploaded_url = raw_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-                    print(f"✅ Successfully uploaded to tmpfiles.org: {uploaded_url}")
-                    return uploaded_url
-        except Exception as te:
-            print(f"⚠️ tmpfiles.org upload failed ({te})")
+            # Crop the bottom 24 pixels (the colored language bar)
+            cropped_img = img.crop((0, 0, w, h - 24))
             
+            img_buffer = BytesIO()
+            cropped_img.save(img_buffer, "PNG")
+            img_data = img_buffer.getvalue()
+        else:
+            print(f"⚠️ Failed to download GitHub OG image. Code: {res.status_code}.")
     except Exception as e:
-        print(f"⚠️ Image crop/upload process failed: {e}. Using uncropped URL.")
+        print(f"⚠️ Image crop process failed: {e}. Cannot upload native media.")
+        return ""
+
+    if not img_data:
+        return ""
+
+    print("📤 Registering image upload with LinkedIn...")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0"
+    }
+    register_payload = {
+        "registerUploadRequest": {
+            "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+            "owner": f"urn:li:organization:{org_id}",
+            "serviceRelationships": [{"relationshipType": "OWNER", "identifier": "urn:li:userGeneratedContent"}]
+        }
+    }
+    
+    try:
+        reg_res = requests.post(
+            "https://api.linkedin.com/v2/assets?action=registerUpload",
+            headers=headers,
+            json=register_payload,
+            timeout=15
+        )
+        reg_res.raise_for_status()
+        reg_data = reg_res.json()
         
-    return fallback_url
+        upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+        asset_urn = reg_data["value"]["asset"]
+        
+        print(f"📤 Uploading image bytes to LinkedIn...")
+        # Note: headers for the PUT request should not include Content-Type or JSON
+        put_res = requests.put(upload_url, data=img_data, headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+        put_res.raise_for_status()
+        
+        print(f"✅ Successfully uploaded native image to LinkedIn. Asset URN: {asset_urn}")
+        return asset_urn
+    except Exception as e:
+        print(f"⚠️ LinkedIn native image upload failed: {e}")
+        return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3 — Send to Make.com Webhook (Make posts to LinkedIn Company Page)
+# STEP 3 — Post directly to LinkedIn API
 # ─────────────────────────────────────────────────────────────────────────────
-def send_to_make_webhook(post_text: str, pr: dict) -> None:
+def post_to_linkedin(post_text: str, pr: dict) -> None:
     """
-    Sends a JSON payload to Make.com webhook.
-    Make.com handles the LinkedIn Company Page posting — no Advertising API needed.
-
-    Payload fields Make.com will receive:
-      - post_text   : Full formatted LinkedIn post
-      - pr_title    : PR title (for Make filters/conditions if needed)
-      - pr_author   : Contributor GitHub username
-      - pr_url      : Direct link to the PR
-      - pr_number   : PR number
-      - tier        : "level:advanced" or "level:critical"
-      - author_avatar : URL to contributor's GitHub avatar
+    Posts the content and image natively to the LinkedIn Company Page.
     """
-    webhook_url = get_env_or_exit("MAKE_WEBHOOK_URL")
-
-    labels = pr["labels"].lower()
-    tier = "level:critical" if "level:critical" in labels else "level:advanced"
-
-    # Crop and upload GitHub OG image (removing bottom language bar)
-    image_url = crop_and_upload_og_image(pr)
+    access_token = get_env_or_exit("LINKEDIN_ACCESS_TOKEN")
+    org_id = get_env_or_exit("LINKEDIN_ORG_ID")
+    
+    print("📤 Preparing to post directly to LinkedIn API...")
+    
+    # 1. Upload image natively (removes third-party Catbox dependency)
+    asset_urn = crop_and_upload_to_linkedin(pr, access_token, org_id)
+    
+    # 2. Prepare post payload
+    author_urn = f"urn:li:organization:{org_id}"
     
     payload = {
-        "post_text": post_text,
-        "text": post_text,
-        "commentary": post_text,
-        "description": post_text,
-        "message": post_text,
-        "content": post_text,
-        "pr_title": pr["title"],
-        "pr_author": pr["author"],
-        "author_avatar": pr.get("author_avatar", ""),
-        "image_url": image_url,
-        "image": image_url,
-        "imageUrl": image_url,
-        "pr_url": pr["url"],
-        "pr_number": pr["number"],
-        "tier": tier,
+        "author": author_urn,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": post_text},
+                "shareMediaCategory": "NONE"
+            }
+        },
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
     }
-
-    if "dry-run" in webhook_url.lower() or "mock" in webhook_url.lower():
-        print("🧪 Dry-run/Mock webhook URL detected. Skipping actual HTTP request to Make.com.")
-        print("Payload data omitted for security.")
-        return
-
-    print("📤 Sending post to Make.com webhook...")
-    print(f"   Webhook: {webhook_url[:15]}***")
-    resp = requests.post(
-        webhook_url,
-        headers={"Content-Type": "application/json"},
-        json=payload,
-        timeout=30,
-    )
-
-    if resp.status_code == 200 and resp.text.strip().lower() == "accepted":
-        print("✅ Make.com accepted the payload — LinkedIn post will be published.")
-    elif resp.status_code == 200:
-        print(f"✅ Make.com responded 200: {resp.text[:100]}")
+    
+    if asset_urn:
+        payload["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "IMAGE"
+        payload["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+            {"status": "READY", "media": asset_urn}
+        ]
     else:
-        print(f"❌ Make.com webhook error: {resp.status_code} — {resp.text}")
+        # Fallback to article link if native image upload failed
+        fallback_url = f"https://opengraph.githubassets.com/1/{pr['repo']}/pull/{pr['number']}"
+        payload["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "ARTICLE"
+        payload["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
+            {"status": "READY", "originalUrl": fallback_url}
+        ]
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0"
+    }
+    
+    print("📤 Sending UGC Post to LinkedIn...")
+    try:
+        resp = requests.post(
+            "https://api.linkedin.com/v2/ugcPosts",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        resp.raise_for_status()
+        print("✅ Successfully published native post to LinkedIn!")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ LinkedIn API error: {e}")
+        if e.response is not None:
+            print(f"Response: {e.response.text}")
         sys.exit(1)
 
 
@@ -693,7 +706,7 @@ def main():
     print("<Final post preview omitted for security>")
     print("─" * 60 + "\n")
 
-    send_to_make_webhook(final_post, pr)
+    post_to_linkedin(final_post, pr)
     
     # Final Output Step
     github_output = os.environ.get("GITHUB_OUTPUT")

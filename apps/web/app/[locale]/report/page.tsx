@@ -3,19 +3,22 @@
 import ReportWizard from "@/components/reports/ReportWizard";
 import { PageHeader } from "../components/PageHeader";
 import ReportInfoPanel from "./ReportInfoPanel";
+import { useTranslations } from "next-intl";
 
 export default function ReportPage() {
+    const t = useTranslations("Report");
+
     return (
-        <div className="flex min-h-screen flex-col overflow-x-hidden bg-(--color-surface-muted) font-sans text-(--color-text-primary) selection:bg-emerald-200">
+        <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-(--color-surface-muted) font-sans text-(--color-text-primary) selection:bg-emerald-200">
             {/* Header component */}
             <PageHeader
-                title="Report Incident"
-                subtitle="Public Safety Initiative"
+                title={t("pageHeader.title")}
+                subtitle={t("pageHeader.subtitle")}
                 backHref="/"
                 variant="light"
             />
 
-            <main className="relative z-10 container mx-auto flex-1 px-4 pt-8 pb-20 md:px-6">
+            <main className="relative z-10 container mx-auto flex-1 min-h-0 px-4 pt-8 pb-[calc(env(safe-area-inset-bottom)+5rem)] md:px-6">
                 {/* Decorative elements */}
                 <div className="pointer-events-none absolute top-0 right-0 -mt-20 -mr-20 h-96 w-96 rounded-full bg-emerald-100/40 blur-3xl dark:bg-emerald-950/10"></div>
                 <div className="pointer-events-none absolute bottom-0 left-0 -mb-20 -ml-20 h-80 w-80 rounded-full bg-teal-100/40 blur-3xl dark:bg-teal-950/10"></div>
@@ -30,18 +33,16 @@ export default function ReportPage() {
                                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
                                 </span>
-                                Active Surveillance
+                                {t("hero.badge")}
                             </div>
                             <h1 className="text-4xl leading-[1.1] font-extrabold tracking-tight text-(--color-text-primary) md:text-5xl">
-                                Report a <br />
+                                {t("hero.titleLine1")} <br />
                                 <span className="bg-linear-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent dark:from-emerald-400 dark:to-teal-400">
-                                    Suspicious Medicine
+                                    {t("hero.titleLine2")}
                                 </span>
                             </h1>
                             <p className="max-w-xl text-lg leading-relaxed font-medium text-(--color-text-secondary)">
-                                Your vigilance protects public health. Report suspected counterfeit,
-                                expired, or substandard medicines. All reports are investigated by
-                                India's Pharmacovigilance authorities.
+                                {t("hero.description")}
                             </p>
                         </div>
 

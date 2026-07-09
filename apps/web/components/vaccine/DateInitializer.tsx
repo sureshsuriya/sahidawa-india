@@ -37,6 +37,13 @@ function parseIsoLocal(iso: string): Date | null {
     return new Date(y, m - 1, d); // Local timezone — no UTC shift
 }
 
+function formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
 export function DateInitializer({ vaccine, value, onChange }: DateInitializerProps) {
     const t = useTranslations("vaccineHub");
 
@@ -73,7 +80,7 @@ export function DateInitializer({ vaccine, value, onChange }: DateInitializerPro
 
     const parsedDate = value ? parseIsoLocal(value) : null;
 
-    const todayIso = new Date().toISOString().split("T")[0];
+    const todayIso = formatLocalDate(new Date());
 
     return (
         <div className="space-y-2">

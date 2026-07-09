@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
@@ -17,13 +18,16 @@ import {
     WifiOff,
 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
-import PharmacyMap, {
-    type HeatmapMode,
-    type Pharmacy,
-    type MapBounds,
-    type RiskHotspot,
-} from "./PharmacyMap";
 import PharmacyPanels, { calculateTrustBreakdown } from "./PharmacyPanels";
+
+const PharmacyMap = dynamic(() => import("./PharmacyMap"), {
+    ssr: false,
+    loading: () => (
+        <div className="flex h-[420px] items-center justify-center rounded-3xl border border-(--color-border-muted) bg-(--color-surface-muted)">
+            <span className="text-sm font-medium text-(--color-text-secondary)">Loading map…</span>
+        </div>
+    ),
+});
 import { fetchPharmacies, fetchPharmaciesInBounds, type OverpassPharmacy } from "./overpassApi";
 import {
     fetchVerifiedPharmacies,
@@ -32,7 +36,13 @@ import {
     type VerifiedPharmacy,
     type ApiAshaWorker,
 } from "../../../lib/api";
-import { type AshaWorker } from "./PharmacyMap";
+import {
+    type AshaWorker,
+    type Pharmacy,
+    type RiskHotspot,
+    type HeatmapMode,
+    type MapBounds,
+} from "./PharmacyMap";
 import MapHeaderLoadingIndicator from "./MapHeaderLoadingIndicator";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { getOpenNowStatus } from "../../../lib/openingHours";
@@ -624,12 +634,30 @@ export default function PharmacyMapPage() {
         }
     }, [fetchNearby, radiusKm]);
 
-    const handleMapMoveEnd = useCallback((bounds: MapBounds) => {
-        if (initialFetchDone.current) {
-            pendingBoundsRef.current = bounds;
-            setShowSearchArea(true);
-        }
-    }, []);
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleMapMoveEnd = useCallback(
+        (bounds: MapBounds) => {
+            if (initialFetchDone.current) {
+                pendingBoundsRef.current = bounds;
+
+                // Accurately reflect loading state during debounce delay
+                setIsLoading(true);
+                setShowSearchArea(false);
+
+                if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current);
+                }
+
+                debounceTimerRef.current = setTimeout(() => {
+                    if (pendingBoundsRef.current) {
+                        fetchInBounds(pendingBoundsRef.current);
+                    }
+                }, 500);
+            }
+        },
+        [fetchInBounds]
+    );
 
     const handleSearchThisArea = useCallback(() => {
         if (pendingBoundsRef.current) fetchInBounds(pendingBoundsRef.current);

@@ -11,6 +11,7 @@ import { verifyMedicine, verifyMedicineByBrand, VerifyResult, fuzzyMatchBrand } 
 import { structuredLog } from "@/lib/structuredLogger";
 import { saveScanHistory } from "@/lib/db/scanHistory";
 import { expiryToIso } from "@/lib/medicineDateUtils";
+import { preprocessMedicineImage } from "@/lib/imageEnhancer";
 
 type UseMedicineImageUploadProps = {
     handleVerify: (batch: string) => Promise<void>;
@@ -74,15 +75,24 @@ export function useMedicineImageUpload({
 
         if (file.size > COMPRESSION_THRESHOLD) {
             try {
-                processedFile = await imageCompression(file, {
+                processedFile = (await imageCompression(file, {
                     maxSizeMB: 1,
                     maxWidthOrHeight: 1920,
                     useWebWorker: true,
-                });
+                })) as File; // using 'as File' since typescript might infer Blob from compression
             } catch {
                 toast.error("Failed to compress image");
                 return;
             }
+        }
+
+        try {
+            const enhancedResult = await preprocessMedicineImage(processedFile);
+            if (typeof enhancedResult !== "string") {
+                processedFile = enhancedResult as File; // maintaining type compatibility
+            }
+        } catch (error) {
+            console.warn("Image enhancement failed, falling back to original", error);
         }
 
         const reader = new FileReader();

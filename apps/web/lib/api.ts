@@ -1,6 +1,16 @@
 import { fetchWithRetry } from "./apiWithRetry";
 import { createSWRCache } from "./cacheUtils";
 
+import type {
+  VerifiedPharmacy,
+  LasaMatch,
+  LasaMatchType,
+} from "@sahidawa/types";
+export type { VerifiedPharmacy, LasaMatch, LasaMatchType };
+
+import { PHARMACY_SEARCH_RADIUS_DEFAULT_KM } from "@sahidawa/shared";
+
+
 const DEFAULT_API_ORIGIN = "http://localhost:4000";
 const configuredApiUrl = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_ORIGIN).trim();
 export const API_BASE = configuredApiUrl.replace(/\/+$/, "");
@@ -229,30 +239,10 @@ export type VerifyResult =
           batch_status?: "safe" | "recalled" | "unknown";
       };
 
-export type VerifiedPharmacy = {
-    id?: string;
-    name: string;
-    address: string;
-    lat: number;
-    lng: number;
-    distance: string;
-    phone_number: string | null;
-    is_verified: boolean;
-    district: string | null;
-    state: string | null;
-    updated_at?: string;
-    is_active?: boolean;
-    deleted_at?: string | null;
-    /** OSM `opening_hours` syntax, e.g. "Mo-Sa 09:00-21:00". Null/absent = unavailable. */
-    operating_hours?: string | null;
-    /** IANA timezone for evaluating operating_hours, e.g. "Asia/Kolkata". */
-    timezone?: string | null;
-};
-
 export async function fetchVerifiedPharmacies(
     lat: number,
     lng: number,
-    radiusKm: number = 50,
+    radiusKm: number = PHARMACY_SEARCH_RADIUS_DEFAULT_KM,
     signal?: AbortSignal
 ): Promise<VerifiedPharmacy[]> {
     try {
@@ -455,14 +445,6 @@ export async function verifyMedicineByBrand(
             true
         )
     );
-}
-
-export type LasaMatchType = "sound-alike" | "look-alike";
-
-export interface LasaMatch {
-    name: string;
-    type: LasaMatchType;
-    score: number;
 }
 
 export interface LasaCheckResult {

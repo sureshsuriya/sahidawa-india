@@ -68,17 +68,63 @@ class CDSCOScraper:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         
-        response = session.get(CDSCO_URL, timeout=30)
+        # ── PAGINATION LOGIC WITH MIDWAY RETRIES ──────────────────────────────
+        all_records = []
+        page_size = 100
+        display_start = 0
+        max_pages = 500  # Infinite loop se bachne ke liye safe upper bound safeguard
+        page_num = 1
 
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"[CDSCO] Fetch failed — HTTP {response.status_code}"
-            )
+        while page_num <= max_pages:
+            paginated_url = f"{CDSCO_URL}&iDisplayStart={display_start}&iDisplayLength={page_size}"
+            logger.info(f"[CDSCO] Fetching page {page_num} (Offset: {display_start})...")
+            
+            # Midway connection resets aur transient timeouts handle karne ke liye page-level retry block
+            page_response = None
+            for attempt in range(1, 4):
+                try:
+                    page_response = session.get(paginated_url, timeout=30)
+                    if page_response.status_code == 200:
+                        break
+                except (requests.ConnectionError, requests.Timeout) as e:
+                    if attempt == 3:
+                        logger.error(f"[CDSCO] Max retries exhausted for page {page_num} due to error: {e}")
+                        raise e
+                    logger.warning(f"[CDSCO] Connection problem on page {page_num} (Attempt {attempt}/3). Retrying in 2s...")
+                    import time
+                    time.sleep(2)
 
-        data = response.json()
-        records = data.get("aaData", [])
-        logger.info(f"[CDSCO] Retrieved {len(records)} records")
+            if not page_response or page_response.status_code != 200:
+                raise RuntimeError(
+                    f"[CDSCO] Fetch failed on page {page_num} — HTTP {page_response.status_code if page_response else 'No Response'}"
+                )
 
+            try:
+                data = page_response.json()
+            except Exception as parse_err:
+                logger.error(f"[CDSCO] JSON parsing failed on page {page_num}: {parse_err}")
+                break
+
+            records = data.get("aaData", [])
+            if not records:
+                logger.info(f"[CDSCO] Empty page reached at page {page_num}. Ending pagination.")
+                break
+
+            all_records.extend(records)
+            logger.info(f"[CDSCO] Page {page_num} fetched successfully: Retrieved {len(records)} records.")
+
+            # Agar records page_size se kam hain, iska matlab yeh aakhiri page hai
+            if len(records) < page_size:
+                logger.info("[CDSCO] Reached the final page (records count is less than page size).")
+                break
+
+            display_start += page_size
+            page_num += 1
+        else:
+            logger.warning(f"[CDSCO] Reached safe safeguard limit of max pages ({max_pages}). Breaking loop.")
+
+        logger.info(f"[CDSCO] Pagination completed. Total cumulative records fetched: {len(all_records)}")
+        
         SEEDS_DIR.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(records)
         df.to_csv(REFERENCE_CSV, index=False)

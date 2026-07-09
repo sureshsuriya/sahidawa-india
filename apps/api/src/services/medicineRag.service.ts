@@ -2,6 +2,11 @@ import { z } from "zod";
 import { anonSupabase } from "../db/supabase";
 import logger from "../utils/logger";
 import { escapeIlike, escapePostgrest } from "../utils/db";
+import {
+    PHARMACY_SEARCH_RADIUS_DEFAULT_KM,
+    PHARMACY_SEARCH_RADIUS_MIN_KM,
+    PHARMACY_SEARCH_RADIUS_MAX_KM,
+} from "@sahidawa/shared";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -109,7 +114,11 @@ export const recommendSchema = z.object({
     symptoms: z.string().trim().min(2).max(500),
     lat: z.coerce.number().min(-90).max(90).optional(),
     lng: z.coerce.number().min(-180).max(180).optional(),
-    radius: z.coerce.number().min(1).max(200).default(50),
+    radius: z.coerce
+        .number()
+        .min(PHARMACY_SEARCH_RADIUS_MIN_KM)
+        .max(PHARMACY_SEARCH_RADIUS_MAX_KM)
+        .default(PHARMACY_SEARCH_RADIUS_DEFAULT_KM),
     limit: z.coerce.number().int().min(1).max(20).default(DEFAULT_MATCH_COUNT),
 });
 
@@ -301,4 +310,115 @@ export async function retrieveRelevantMedicines(
     }
 
     return ((tableData ?? []) as MedicineRow[]).map(formatMedicineMatch);
+}
+
+// ── Batch Embedding & Bulk Insert (Issue #3137) ──────────────────────────────
+
+const BATCH_SIZE = 50; // Google batchEmbedContents allows up to 100, 50 is a safe standard
+const BATCH_EMBEDDING_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:batchEmbedContents`;
+
+interface BatchEmbeddingResponse {
+    embeddings?: Array<{ values?: unknown }>;
+}
+
+/**
+ * Accepts an array of Medicine rows, chunks them, generates embeddings in batches
+ * using Google's batchEmbedContents endpoint, and updates the database via a bulk upsert.
+ */
+export async function embedMedicinesBatch(rows: MedicineRow[]): Promise<void> {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!apiKey) {
+        logger.error("Missing GEMINI_API_KEY. Skipping batch embedding.");
+        return;
+    }
+
+    if (!rows || rows.length === 0) {
+        logger.info("No medicine rows provided for batch embedding.");
+        return;
+    }
+
+    logger.info(`Starting batch embedding pipeline for ${rows.length} medicines.`);
+
+    // Loop through rows in chunks of BATCH_SIZE
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const chunk = rows.slice(i, i + BATCH_SIZE);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), EMBEDDING_TIMEOUT_MS * 2); // Slightly higher timeout for batches
+
+        try {
+            // Map chunk items to the structure expected by batchEmbedContents
+            const requests = chunk.map((row) => ({
+                model: `models/${EMBEDDING_MODEL}`,
+                content: { parts: [{ text: buildMedicineMonograph(row) }] },
+            }));
+
+            const response = await fetch(
+                `${BATCH_EMBEDDING_ENDPOINT}?key=${encodeURIComponent(apiKey)}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ requests }),
+                    signal: controller.signal,
+                }
+            );
+
+            if (!response.ok) {
+                logger.warn(`Batch embedding API request failed for chunk index ${i}`, {
+                    status: response.status,
+                });
+                continue; // Move to the next batch instead of crashing the process
+            }
+
+            const body = (await response.json().catch(() => null)) as BatchEmbeddingResponse | null;
+            const embeddingsArray = body?.embeddings;
+
+            if (!Array.isArray(embeddingsArray) || embeddingsArray.length !== chunk.length) {
+                logger.warn(
+                    `Unexpected response shape or mismatch length in batch embedding for chunk index ${i}`
+                );
+                continue;
+            }
+
+            // Prepare payloads for pgvector bulk upsert/insert
+            const upsertPayload = chunk
+                .map((row, index) => {
+                    const values = embeddingsArray[index]?.values;
+                    const isValidEmbedding =
+                        Array.isArray(values) &&
+                        values.length === EMBEDDING_DIMENSIONS &&
+                        values.every((v) => typeof v === "number");
+
+                    return {
+                        id: row.id,
+                        embedding: isValidEmbedding ? (values as number[]) : null,
+                    };
+                })
+                .filter((item) => item.embedding !== null); // Only save successful ones
+
+            if (upsertPayload.length > 0) {
+                // Perform single pgvector bulk upsert for this batch
+                const { error: upsertError } = await anonSupabase
+                    .from("medicines")
+                    .upsert(upsertPayload, { onConflict: "id" });
+
+                if (upsertError) {
+                    logger.error(`Supabase bulk upsert failed for chunk index ${i}`, {
+                        error: upsertError.message,
+                    });
+                } else {
+                    logger.info(
+                        `Successfully processed and bulk inserted ${upsertPayload.length} embeddings (Chunk ${i}-${i + chunk.length}).`
+                    );
+                }
+            }
+        } catch (error) {
+            logger.warn(`Error encountered during batch embedding pipeline at chunk index ${i}`, {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    logger.info("Batch embedding pipeline execution finished.");
 }

@@ -1,8 +1,9 @@
 "use client";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { API_BASE } from "@/lib/api";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface RequestVerificationModalProps {
     isOpen: boolean;
@@ -19,6 +20,9 @@ export function RequestVerificationModal({
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap(containerRef, isOpen);
 
     if (!isOpen) return null;
 
@@ -42,7 +46,7 @@ export function RequestVerificationModal({
             const formData = new FormData();
             formData.append("file", file);
 
-            // Connects to the existing scan extract route acting as our OCR processor / verification queue
+            // Step 1: Send image to the OCR extract endpoint
             const res = await fetch(`${API_BASE}/api/v1/scan/extract`, {
                 method: "POST",
                 body: formData,
@@ -53,19 +57,63 @@ export function RequestVerificationModal({
                 throw new Error(data.error || "Failed to upload image");
             }
 
+            const ocrResult = await res.json().catch(() => ({}));
+
+            // Step 2: Save the verification request to Supabase for admin review
+            try {
+                const { supabase } = await import("@/lib/supabase");
+                const { data: sessionData } = await supabase.auth.getSession();
+                const userId = sessionData?.session?.user?.id ?? null;
+
+                await supabase.from("medicine_verification_requests").insert({
+                    medicine_name: medicineName,
+                    ocr_extracted_text: ocrResult?.extracted_text
+                        ? String(ocrResult.extracted_text)
+                        : ocrResult?.medicine_name
+                          ? String(ocrResult.medicine_name)
+                          : null,
+                    ocr_raw_response: ocrResult ?? null,
+                    status: "pending",
+                    submitted_by: userId,
+                });
+            } catch {
+                // Non-fatal: OCR succeeded but DB save failed — still show success to user
+                console.warn(
+                    "[RequestVerificationModal] Failed to save verification request to DB"
+                );
+            }
+
             setIsSuccess(true);
-        } catch (err: any) {
-            setError(err.message || "An unexpected error occurred.");
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+            setError(message);
         } finally {
             setIsLoading(false);
         }
     };
 
+    const handleEscape = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Escape" && !isLoading) {
+            onClose();
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div
+            ref={containerRef}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-verification-title"
+            onKeyDown={handleEscape}
+            tabIndex={-1}
+        >
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900">
                 <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                    <h3
+                        id="request-verification-title"
+                        className="text-xl font-bold text-slate-800 dark:text-slate-100"
+                    >
                         Request Verification
                     </h3>
                     <button

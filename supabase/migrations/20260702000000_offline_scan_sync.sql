@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.scan_submission_parts (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   scan_id           TEXT NOT NULL REFERENCES public.user_scan_history(id) ON DELETE CASCADE,
   part_type         TEXT NOT NULL CHECK (part_type IN ('metadata', 'image', 'voice')),
-  status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'synced', 'failed')),
+  status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'synced', 'failed', 'skipped')),
   attempt_count     INT NOT NULL DEFAULT 0,
   last_error        TEXT,
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()

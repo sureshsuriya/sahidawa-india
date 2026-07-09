@@ -70,6 +70,26 @@ if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
 else:
     logger.info("Supabase Storage not configured. Using local TTS cache only.")
 
+# Redis configuration for shared TTS cache
+REDIS_URL = os.getenv("REDIS_URL")
+REDIS_CACHE_TTL_SECONDS = int(os.getenv("REDIS_CACHE_TTL_SECONDS", "86400"))  # 24 hours
+
+redis_client = None
+
+if REDIS_URL:
+    try:
+        import redis
+        redis_client = redis.from_url(REDIS_URL)
+        redis_client.ping()  # verify connectivity at startup
+        logger.info("Redis client initialized for TTS cache")
+    except ImportError:
+        logger.warning("redis package not installed. Install with: pip install redis")
+    except Exception as e:
+        logger.warning(f"Redis initialization failed: {e}")
+        redis_client = None
+else:
+    logger.info("Redis not configured. Skipping Redis TTS cache.")
+
 
 def prune_cache():
     """Prune oldest cache files if cache limits (size or file count) are exceeded."""
@@ -198,6 +218,30 @@ def upload_to_supabase_cache(cache_key: str, compressed_audio: bytes) -> None:
         logger.warning(f"TTS cloud cache upload failed: {e}")
 
 
+def download_from_redis_cache(cache_key: str) -> Optional[bytes]:
+    """Download compressed TTS audio from Redis."""
+    if not redis_client:
+        return None
+
+    try:
+        return redis_client.get(f"tts:{cache_key}")
+    except Exception as e:
+        logger.info(f"TTS Redis cache miss or fetch failed: {e}")
+        return None
+
+
+def upload_to_redis_cache(cache_key: str, compressed_audio: bytes) -> None:
+    """Upload compressed TTS audio to Redis with a 24-hour TTL."""
+    if not redis_client:
+        return
+
+    try:
+        redis_client.setex(f"tts:{cache_key}", REDIS_CACHE_TTL_SECONDS, compressed_audio)
+        logger.info(f"Cached TTS result to Redis: tts:{cache_key}")
+    except Exception as e:
+        logger.warning(f"TTS Redis cache upload failed: {e}")
+
+
 def generate_with_google(text: str, language_code: str, gender: str) -> tuple[bytes, str]:
     """Generate TTS using Google Cloud Text-to-Speech"""
     if not tts_google_client:
@@ -216,7 +260,7 @@ def generate_with_google(text: str, language_code: str, gender: str) -> tuple[by
         from google.cloud import texttospeech
 
         synthesis_input = texttospeech.SynthesisInput(text=text)
-        
+
         gender_enum = {
             "MALE": texttospeech.SsmlVoiceGender.MALE,
             "FEMALE": texttospeech.SsmlVoiceGender.FEMALE,
@@ -281,9 +325,9 @@ def generate_with_azure(text: str, language_code: str, gender: str) -> tuple[byt
         }
 
         endpoint = f"https://{azure_tts_region}.tts.speech.microsoft.com/cognitiveservices/v1"
-        
+
         response = requests.post(endpoint, headers=headers, data=ssml_text.encode('utf-8'), timeout=30)
-        
+
         if response.status_code != 200:
             raise Exception(f"Azure API returned {response.status_code}: {response.text}")
 
@@ -299,7 +343,7 @@ def generate_with_azure(text: str, language_code: str, gender: str) -> tuple[byt
 async def generate_tts(request: TTSRequest):
     """
     Generate speech audio from text.
-    
+
     Supported languages:
     - en-IN: English (Indian)
     - hi-IN: हिन्दी (Hindi)
@@ -307,7 +351,7 @@ async def generate_tts(request: TTSRequest):
     - bn-IN: বাংলা (Bengali)
     - mr-IN: मराठी (Marathi)
     - te-IN: తెలుగు (Telugu)
-    
+
     Returns:
     - audio_base64: MP3 audio encoded as Base64 string (standard for web clients)
     - provider: Which service generated the audio
@@ -329,7 +373,7 @@ async def generate_tts(request: TTSRequest):
             with open(cache_file, "rb") as f:
                 compressed_data = f.read()
             audio_data = gzip.decompress(compressed_data)
-            
+
             return TTSResponse(
                 audio_base64=base64.b64encode(audio_data).decode('utf-8'),
                 language_code=request.language_code,
@@ -339,6 +383,27 @@ async def generate_tts(request: TTSRequest):
             )
         except Exception as e:
             logger.warning(f"Cache read failed: {e}")
+    # Check Redis cache
+    compressed_redis_data = download_from_redis_cache(cache_key)
+    if compressed_redis_data:
+        try:
+            audio_data = gzip.decompress(compressed_redis_data)
+
+            try:
+                with open(cache_file, "wb") as f:
+                    f.write(compressed_redis_data)
+            except Exception as e:
+                logger.warning(f"Failed to write Redis cache to local disk: {e}")
+
+            return TTSResponse(
+                audio_base64=base64.b64encode(audio_data).decode('utf-8'),
+                language_code=request.language_code,
+                provider="redis-cache",
+                cached=True,
+                character_count=len(request.text)
+            )
+        except Exception as e:
+            logger.warning(f"Redis cache decompress failed: {e}")
     # Check Supabase Storage cache
     compressed_cloud_data = download_from_supabase_cache(cache_key)
     if compressed_cloud_data:
@@ -381,6 +446,7 @@ async def generate_tts(request: TTSRequest):
             with open(cache_file, "wb") as f:
                 f.write(compressed_audio)
             logger.info(f"✓ Cached TTS result to {cache_file}")
+            upload_to_redis_cache(cache_key, compressed_audio)
             upload_to_supabase_cache(cache_key, compressed_audio)
             try:
                 prune_cache()
@@ -415,5 +481,6 @@ def tts_health():
         "provider": TTS_PROVIDER,
         "google_available": tts_google_client is not None,
         "azure_available": azure_tts_key is not None,
+        "redis_cache_available": redis_client is not None,
         "supported_languages": list(GOOGLE_VOICES_MAP.keys()) if TTS_PROVIDER == "google" else list(AZURE_VOICES_MAP.keys())
     }

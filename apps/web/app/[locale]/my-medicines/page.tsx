@@ -46,6 +46,7 @@ export default function MyMedicinesPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [verificationModalOpen, setVerificationModalOpen] = useState(false);
     const [selectedMedicine, setSelectedMedicine] = useState<TrackedMedicine | null>(null);
+    const verificationTriggerRef = React.useRef<HTMLButtonElement | null>(null);
 
     const handleUnverifiedClick = (medicine: TrackedMedicine) => {
         setSelectedMedicine(medicine);
@@ -66,7 +67,7 @@ export default function MyMedicinesPage() {
                 const res = await fetch(`${API_BASE}/api/v1/medicines/tracked`);
 
                 if (!res.ok) {
-                    throw new Error(`Request failed with status ${res.status}. Please try again.`);
+                    throw new Error(t("errors.statusError", { status: res.status }));
                 }
 
                 const data = await res.json();
@@ -96,6 +97,11 @@ export default function MyMedicinesPage() {
             isOpen: true,
             bookmarkName: name,
         });
+    };
+
+    const closeVerificationModal = () => {
+        setVerificationModalOpen(false);
+        requestAnimationFrame(() => verificationTriggerRef.current?.focus());
     };
 
     const confirmRemoveBookmark = () => {
@@ -202,24 +208,30 @@ export default function MyMedicinesPage() {
                                                     {med.is_verified === true && (
                                                         <Badge
                                                             variant="success"
-                                                            aria-label="Verification status"
+                                                            aria-label={t(
+                                                                "badges.verificationStatus"
+                                                            )}
                                                         >
                                                             ✓ {t("badges.verified")}
                                                         </Badge>
                                                     )}
                                                     {med.is_verified === false && (
                                                         <button
-                                                            onClick={() =>
-                                                                handleUnverifiedClick(med)
-                                                            }
-                                                            className="transition-transform hover:scale-105 active:scale-95"
+                                                            onClick={(event) => {
+                                                                verificationTriggerRef.current =
+                                                                    event.currentTarget;
+                                                                handleUnverifiedClick(med);
+                                                            }}
+                                                            className="min-h-11 transition-transform hover:scale-105 active:scale-95"
                                                             title={t(
                                                                 "badges.requestVerificationTitle"
                                                             )}
                                                         >
                                                             <Badge
                                                                 variant="warning"
-                                                                aria-label="Verification status"
+                                                                aria-label={t(
+                                                                    "badges.verificationStatus"
+                                                                )}
                                                             >
                                                                 ⚠ {t("badges.unverified")}
                                                             </Badge>
@@ -301,7 +313,7 @@ export default function MyMedicinesPage() {
             {selectedMedicine && (
                 <RequestVerificationModal
                     isOpen={verificationModalOpen}
-                    onClose={() => setVerificationModalOpen(false)}
+                    onClose={closeVerificationModal}
                     medicineName={selectedMedicine.medicine_name}
                 />
             )}

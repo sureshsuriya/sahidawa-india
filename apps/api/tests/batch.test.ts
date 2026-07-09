@@ -210,6 +210,12 @@ describe("GET /api/verify/batch/:batchNumber", () => {
         expect(mockedSupabase.from).toHaveBeenNthCalledWith(2, "medicines");
     });
 
+    it("should return Cache-Control header", async () => {
+        const response = await request(app).get("/api/verify/batch/ab");
+
+        expect(response.headers["cache-control"]).toContain("public");
+    });
+
     it("returns 400 for invalid batch number input before querying Supabase", async () => {
         const response = await request(app).get("/api/verify/batch/ab");
 

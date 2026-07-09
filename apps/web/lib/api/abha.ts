@@ -1,20 +1,12 @@
 import { API_BASE, getCsrfToken } from "../api";
 import { fetchWithRetry } from "../apiWithRetry";
+import type { ABHALinkResponse, ABHAPrescription, ABHAVerificationData } from "@sahidawa/types";
+export type { ABHALinkResponse, ABHAPrescription, ABHAVerificationData };
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
-export interface ABHALinkResponse {
-    txnId: string;
-}
-
 export interface ABHAVerifyResponse {
     token: string;
-}
-
-export interface ABHAPrescription {
-    id: string;
-    title: string;
-    issuedAt: string;
 }
 
 export interface ABHAUploadResponse {
@@ -61,6 +53,7 @@ export async function linkABHA(
 
 export async function verifyABHAOtp(
     payload: {
+        abhaAddress: string;
         txnId: string;
         otp: string;
     },
@@ -90,6 +83,35 @@ export async function verifyABHAOtp(
     return res.json() as Promise<ABHAVerifyResponse>;
 }
 
+// ─── Status ───────────────────────────────────────────────────────────────────
+
+export interface ABHAStatusResponse {
+    isLinked: boolean;
+    abhaAddress?: string;
+}
+
+export async function getABHAStatus(
+    accessToken?: string,
+    signal?: AbortSignal
+): Promise<ABHAStatusResponse> {
+    const res = await fetchWithRetry(`${API_BASE}/api/v1/abha/status`, {
+        method: "GET",
+        headers: {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        credentials: "include",
+        timeout: 10000,
+        signal,
+    });
+
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to get ABHA status");
+    }
+
+    return res.json() as Promise<ABHAStatusResponse>;
+}
+
 // ─── Get Prescriptions ────────────────────────────────────────────────────────
 
 export async function getABHAPrescriptions(
@@ -117,11 +139,7 @@ export async function getABHAPrescriptions(
 // ─── Upload Verification ──────────────────────────────────────────────────────
 
 export async function uploadABHAVerification(
-    payload: {
-        medicineId: string;
-        verificationResult: string;
-        scannedAt: string;
-    },
+    payload: ABHAVerificationData,
     accessToken?: string,
     signal?: AbortSignal
 ): Promise<ABHAUploadResponse> {

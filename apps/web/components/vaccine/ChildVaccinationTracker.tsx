@@ -10,6 +10,7 @@ import {
     validateChildDateOfBirth,
 } from "@/lib/childVaccinationSchedule";
 import { supabase } from "@/lib/supabase";
+import type Tesseract from "tesseract.js";
 import {
     AlertCircle,
     Baby,
@@ -38,6 +39,11 @@ const EMPTY_TRACKER_STATE: ChildTrackerState = {
 const CHILD_NAME_MAX_LENGTH = 80;
 const VALID_DOSE_IDS = new Set(NATIONAL_IMMUNIZATION_SCHEDULE.map((item) => item.id));
 const TRACKER_STORAGE_KEY = "vaccine-hub-child-tracker-v1";
+
+// OCR scan input limits: guards against sending oversized images to
+// client-side Tesseract OCR, which can freeze the page.
+const MAX_SCAN_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_SCAN_IMAGE_DIMENSION = 4000; // px, per side
 
 type SyncContext =
     | { status: "loading" }
@@ -342,8 +348,44 @@ export function ChildVaccinationTracker() {
         const file = e.target.files?.[0];
         if (!file) return;
         e.target.value = "";
-        setIsOcrScanning(true);
         setOcrError(null);
+
+        // Validate file type before doing any expensive work.
+        if (!file.type.startsWith("image/")) {
+            setOcrError("Please upload a valid image file (JPG, PNG, etc.).");
+            return;
+        }
+
+        // Validate file size to avoid handing huge files to client-side OCR.
+        if (file.size > MAX_SCAN_FILE_SIZE_BYTES) {
+            setOcrError(
+                `This image is too large (max ${Math.floor(MAX_SCAN_FILE_SIZE_BYTES / (1024 * 1024))} MB). Please upload a smaller photo.`
+            );
+            return;
+        }
+
+        // Validate pixel dimensions to avoid freezing the page on very
+        // high-resolution images.
+        let dimensions: { width: number; height: number };
+        try {
+            dimensions = await getImageDimensions(file);
+        } catch {
+            setOcrError("Could not read this image. Please try a different photo.");
+            return;
+        }
+
+        if (
+            dimensions.width > MAX_SCAN_IMAGE_DIMENSION ||
+            dimensions.height > MAX_SCAN_IMAGE_DIMENSION
+        ) {
+            setOcrError(
+                `This image's resolution is too high (max ${MAX_SCAN_IMAGE_DIMENSION}px per side). Please upload a smaller photo.`
+            );
+            return;
+        }
+
+        setIsOcrScanning(true);
+        let worker: Tesseract.Worker | null = null;
         try {
             const Tesseract = (await import("tesseract.js")).default;
             const reader = new FileReader();
@@ -352,9 +394,8 @@ export function ChildVaccinationTracker() {
                 reader.onerror = () => reject(new Error("Failed to read file"));
                 reader.readAsDataURL(file);
             });
-            const worker = await Tesseract.createWorker("eng");
+            worker = await Tesseract.createWorker("eng");
             const { data } = await worker.recognize(dataUrl);
-            await worker.terminate();
             const text = data.text;
 
             // Parse DOB: look for DD/MM/YYYY or DD-MM-YYYY patterns
@@ -394,6 +435,13 @@ export function ChildVaccinationTracker() {
         } catch {
             setOcrError("Failed to scan image. Please try again.");
         } finally {
+            if (worker) {
+                try {
+                    await worker.terminate();
+                } catch (error) {
+                    console.error("Failed to terminate vaccine OCR worker:", error);
+                }
+            }
             setIsOcrScanning(false);
         }
     };
@@ -666,6 +714,23 @@ function normalizeCompletedDoseIds(doseIds: unknown[]): string[] {
 
 function getProfileSyncSignature(state: Pick<ChildTrackerState, "childName" | "dateOfBirth">) {
     return `${state.childName}\n${state.dateOfBirth}`;
+}
+
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+
+        image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve({ width: image.naturalWidth, height: image.naturalHeight });
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("Failed to load image"));
+        };
+        image.src = objectUrl;
+    });
 }
 
 function ScheduleTimelineItem({

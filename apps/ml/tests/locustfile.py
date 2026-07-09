@@ -9,8 +9,19 @@ mode. The local development service uses port 8000 by default.
 
 from pathlib import Path
 
-from locust import HttpUser, between, task
+from locust import HttpUser, between, task, events
 from locust.exception import StopUser
+import logging
+
+@events.quitting.add_listener
+def _(environment, **kw):
+    if environment.stats.total.fail_ratio > 0.05:
+        logging.error(f"Test failed due to failure ratio > 5% ({environment.stats.total.fail_ratio})")
+        environment.process_exit_code = 1
+    elif environment.stats.total.avg_response_time > 2000:
+        logging.error(f"Test failed due to average response time > 2000 ms ({environment.stats.total.avg_response_time})")
+        environment.process_exit_code = 1
+
 
 
 SAMPLE_WAV_PATH = Path(__file__).resolve().parent / "fixtures" / "hindi_sample.wav"

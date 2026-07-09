@@ -28,6 +28,7 @@ export default function ExpiryTrackerPage() {
         deleteMedicine,
         bulkDeleteMedicines,
         importMedicines,
+        snoozeMedicine,
     } = useMedicineTracker();
 
     // Form state
@@ -62,6 +63,7 @@ export default function ExpiryTrackerPage() {
     // IO / System state
     const [importError, setImportError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const scannerTriggerRef = useRef<HTMLButtonElement | null>(null);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);
@@ -90,6 +92,7 @@ export default function ExpiryTrackerPage() {
     const handleScannerClose = useCallback(() => {
         setIsScannerOpen(false);
         setApiError(null);
+        requestAnimationFrame(() => scannerTriggerRef.current?.focus());
     }, []);
 
     const updateExpiryState = useCallback((dateInputValue: string) => {
@@ -298,8 +301,16 @@ export default function ExpiryTrackerPage() {
         return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     };
 
-    const getExpiryStatus = (dateStr: string) => {
-        const diffDays = getDiffDays(dateStr);
+    const getExpiryStatus = (med: Medicine) => {
+        if (med.snoozedUntil && new Date(med.snoozedUntil) > new Date()) {
+            return {
+                icon: <CheckCircle2 size={14} />,
+                text: t("statusSafe"),
+                color: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-900/30",
+                key: "safe" as FilterStatus,
+            };
+        }
+        const diffDays = getDiffDays(med.expiryDate);
         if (diffDays < 0)
             return {
                 icon: <XCircle size={14} />,
@@ -351,7 +362,7 @@ export default function ExpiryTrackerPage() {
             med.name,
             parseLocalDate(med.expiryDate).toLocaleDateString(),
             med.batchNumber ?? "—",
-            getExpiryStatus(med.expiryDate).text,
+            getExpiryStatus(med).text,
         ]);
 
         try {
@@ -435,7 +446,7 @@ export default function ExpiryTrackerPage() {
     const processedMedicines = medicines
         .filter((med) => {
             if (filterStatus === "all") return true;
-            return getExpiryStatus(med.expiryDate).key === filterStatus;
+            return getExpiryStatus(med).key === filterStatus;
         })
         .filter((med) => med.name.toLowerCase().includes(searchQuery.toLowerCase()))
         .sort((a, b) => {
@@ -481,7 +492,10 @@ export default function ExpiryTrackerPage() {
                         onDateErrorChange={setDateError}
                         onSubmit={handleSubmit}
                         onCancelEdit={cancelEdit}
-                        onOpenScanner={() => setIsScannerOpen(true)}
+                        onOpenScanner={() => {
+                            scannerTriggerRef.current = document.activeElement as HTMLButtonElement;
+                            setIsScannerOpen(true);
+                        }}
                         onExportPDF={handleExportPDF}
                         onPrint={handlePrint}
                         onExport={handleExport}
@@ -512,6 +526,7 @@ export default function ExpiryTrackerPage() {
                             onToggleSelect={toggleSelect}
                             onStartEdit={startEdit}
                             onDelete={handleDelete}
+                            onSnooze={snoozeMedicine}
                         />
                     </div>
                 </div>
@@ -533,7 +548,7 @@ export default function ExpiryTrackerPage() {
                 isOpen={confirmDialog.isOpen && confirmDialog.type === "single"}
                 title={t("deleteConfirmTitle") || "Delete Medicine?"}
                 description={
-                    t("deleteConfirmMessage") ||
+                    t("deleteConfirmMessage", { medicine: confirmDialog.medicineName ?? "" }) ||
                     `This will permanently remove "${confirmDialog.medicineName}" from your tracked medicines. This action cannot be undone.`
                 }
                 confirmText={t("deleteMedicine") || "Delete"}
@@ -549,7 +564,7 @@ export default function ExpiryTrackerPage() {
                 isOpen={confirmDialog.isOpen && confirmDialog.type === "bulk"}
                 title={t("bulkDeleteConfirmTitle") || "Delete Multiple Medicines?"}
                 description={
-                    t("bulkDeleteConfirmMessage") ||
+                    t("bulkDeleteConfirmMessage", { count: confirmDialog.count ?? 0 }) ||
                     `This will permanently remove ${confirmDialog.count} medicine(s) from your tracked list. This action cannot be undone.`
                 }
                 confirmText={t("deleteMedicine") || "Delete All"}

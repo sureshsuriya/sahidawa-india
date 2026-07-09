@@ -13,6 +13,36 @@ interface ExportModalProps {
     t: (key: string) => string;
 }
 
+// Characters that spreadsheet apps (Excel, Google Sheets, LibreOffice) treat
+// as the start of a formula when they appear as the first character of a cell.
+const FORMULA_TRIGGER_CHARS = ["=", "+", "-", "@", "\t", "\r"];
+
+/**
+ * Safely prepares a value for inclusion in a CSV file.
+ *
+ * 1. Formula-injection guard: if the stringified value starts with a
+ *    character a spreadsheet app would interpret as the start of a formula
+ *    (=, +, -, @, or leading tab/carriage-return tricks), prefix it with a
+ *    single quote. Spreadsheet apps then render the cell as plain text
+ *    instead of evaluating it.
+ * 2. Standard CSV escaping: if the value contains a comma, double quote,
+ *    or newline, wrap it in double quotes and escape any internal double
+ *    quotes by doubling them, per RFC 4180.
+ */
+function sanitizeCsvField(value: unknown): string {
+    let str = value === null || value === undefined ? "" : String(value);
+
+    if (FORMULA_TRIGGER_CHARS.some((char) => str.startsWith(char))) {
+        str = `'${str}`;
+    }
+
+    if (/[",\n\r]/.test(str)) {
+        str = `"${str.replace(/"/g, '""')}"`;
+    }
+
+    return str;
+}
+
 export default function ExportModal({ isOpen, onClose, history, t }: ExportModalProps) {
     const [dateRange, setDateRange] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -51,10 +81,10 @@ export default function ExportModal({ isOpen, onClose, history, t }: ExportModal
             const headers = ["ID", "Date", "Medicine Name", "Status"];
 
             const rows = filtered.map((e) => [
-                e.id,
-                new Date(e.timestamp).toISOString(),
-                `"${e.medicineName}"`,
-                e.status,
+                sanitizeCsvField(e.id),
+                sanitizeCsvField(new Date(e.timestamp).toISOString()),
+                sanitizeCsvField(e.medicineName),
+                sanitizeCsvField(e.status),
             ]);
 
             const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -79,14 +109,30 @@ export default function ExportModal({ isOpen, onClose, history, t }: ExportModal
         }
     };
 
+    const handleEscape = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Escape") {
+            onClose();
+        }
+    };
+
     return (
-        <div className="animate-in fade-in fixed inset-0 z-[150] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200">
+        <div
+            className="animate-in fade-in fixed inset-0 z-[150] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-history-title"
+            onKeyDown={handleEscape}
+            tabIndex={-1}
+        >
             <div
                 ref={modalRef}
                 className="w-full max-w-md overflow-hidden rounded-3xl border border-(--color-border-muted) bg-(--color-surface-page) shadow-2xl"
             >
                 <div className="flex items-center justify-between border-b border-(--color-border-muted) px-6 py-4">
-                    <h3 className="text-lg font-bold text-(--color-text-primary)">
+                    <h3
+                        id="export-history-title"
+                        className="text-lg font-bold text-(--color-text-primary)"
+                    >
                         {t("export_modal_title")}
                     </h3>
 
