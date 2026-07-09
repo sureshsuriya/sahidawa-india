@@ -1412,7 +1412,8 @@
             "title": "Couldn't Load Your Medicines",
             "generic": "Something went wrong while fetching your tracked medicines.",
             "fetchFailed": "Failed to load tracked medicines. Please check your connection and try again.",
-            "tryAgain": "Try Again"
+            "tryAgain": "Try Again",
+            "statusError": "Request failed with status {status}. Please try again."
         },
         "emptyState": {
             "title": "No Medicines Tracked Yet",
@@ -1428,7 +1429,8 @@
         "badges": {
             "verified": "Verified",
             "unverified": "Unverified",
-            "requestVerificationTitle": "Click to request verification"
+            "requestVerificationTitle": "Click to request verification",
+            "verificationStatus": "Verification status"
         },
         "bookmarks": {
             "savedAlternatives": "Saved Alternatives",
