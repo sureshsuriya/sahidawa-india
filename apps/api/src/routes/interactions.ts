@@ -4,7 +4,8 @@ import { supabase, dbConfig } from "../db/client";
 import logger from "../utils/logger";
 import { escapePostgrest } from "../utils/db";
 import { uuidSchema } from "../utils/validation";
-import { interactionCheckLimiter } from "../middleware/rateLimit";
+import { interactionCheckLimiter, interactionIdsLimiter } from "../middleware/rateLimit";
+import { redisCache } from "../middleware/redisCache";
 import zlib from "zlib";
 import { MAX_INTERACTION_MEDICINES } from "@sahidawa/shared";
 
@@ -24,9 +25,19 @@ type InteractionRecord = LocalInteraction & {
     data_version?: string;
 };
 
+const MAX_MEDICINE_NAME_LENGTH = 200;
+
 const checkSchema = z.object({
     medicines: z
-        .array(z.string())
+        .array(
+            z
+                .string()
+                .min(1, "Medicine name cannot be empty")
+                .max(
+                    MAX_MEDICINE_NAME_LENGTH,
+                    `Medicine name must not exceed ${MAX_MEDICINE_NAME_LENGTH} characters`
+                )
+        )
         .min(2, "At least two medicines are required to check interactions")
         .max(
             MAX_INTERACTION_MEDICINES,
@@ -308,95 +319,100 @@ async function loadInteractionsForGenerics(genericNames: string[]): Promise<Inte
  *           type: string
  *         example: med-a,med-b,med-c
  */
-router.get("/", interactionCheckLimiter, async (req: Request, res: Response) => {
-    const parsedIds = parseIdsParam(req.query.ids);
+router.get(
+    "/",
+    interactionIdsLimiter,
+    redisCache(60, (req) => `interactions:ids:${(req.query.ids as string) ?? ""}`),
+    async (req: Request, res: Response) => {
+        const parsedIds = parseIdsParam(req.query.ids);
 
-    if (!parsedIds.success) {
-        res.status(400).json({ error: "Invalid medicine id list" });
-        return;
-    }
-
-    const { ids } = parsedIds;
-
-    try {
-        const { data, error } = await supabase
-            .from("medicines")
-            .select("id, brand_name, generic_name")
-            .in("id", ids);
-
-        if (error) {
-            throw error;
-        }
-
-        const medicineById = new Map<string, MedicineLookup>();
-        ((data ?? []) as MedicineLookup[]).forEach((medicine: MedicineLookup) => {
-            medicineById.set(medicine.id, medicine);
-        });
-
-        const medicines = ids
-            .map((id) => medicineById.get(id))
-            .filter((medicine): medicine is MedicineLookup => medicine != null);
-
-        if (medicines.length < 2) {
-            res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-            res.status(200).json({ interactions: [] });
+        if (!parsedIds.success) {
+            res.status(400).json({ error: "Invalid medicine id list" });
             return;
         }
 
-        const selectedGenerics = Array.from(
-            new Set(medicines.map((medicine) => normalizeGenericName(medicine.generic_name)))
-        );
-        const interactionByPair = indexInteractions(
-            await loadInteractionsForGenerics(selectedGenerics)
-        );
-        const isFallback = dbConfig?.isSupabaseOffline ?? true;
-        const interactions = [];
+        const { ids } = parsedIds;
 
-        for (let i = 0; i < medicines.length; i++) {
-            for (let j = i + 1; j < medicines.length; j++) {
-                const medicineA = medicines[i];
-                const medicineB = medicines[j];
-                const drugA = normalizeGenericName(medicineA.generic_name);
-                const drugB = normalizeGenericName(medicineB.generic_name);
-                const match = interactionByPair.get(getInteractionPairKey(drugA, drugB));
-                const severity = mapSeverityTag(match?.severity);
+        try {
+            const { data, error } = await supabase
+                .from("medicines")
+                .select("id, brand_name, generic_name")
+                .in("id", ids);
 
-                interactions.push({
-                    medicineAId: medicineA.id,
-                    medicineBId: medicineB.id,
-                    drugA: displayMedicineName(medicineA),
-                    drugAGeneric: drugA,
-                    drugB: displayMedicineName(medicineB),
-                    drugBGeneric: drugB,
-                    severity,
-                    sideEffects:
-                        match?.description ||
-                        "No known harmful interaction found between these medicines.",
-                    description:
-                        match?.description ||
-                        "No known harmful interaction found between these medicines.",
-                    precautions:
-                        match?.clinical_recommendation ||
-                        "Follow the prescribed dosage and consult a clinician if symptoms change.",
-                    mechanism: match?.mechanism || "No interaction mechanism is documented.",
-                    source: match?.source || "SahiDawa interaction checker",
-                    verified: !isFallback,
-                    disclaimer: isFallback
-                        ? "⚠️ Using offline interaction database. Data may be outdated. Consult a pharmacist."
-                        : undefined,
-                    last_updated_at: match?.last_updated_at,
-                });
+            if (error) {
+                throw error;
             }
-        }
 
-        res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-        res.status(200).json({ interactions });
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        logger.error(`Error checking interaction ids: ${msg}`);
-        res.status(500).json({ error: "Failed to check medicine interactions" });
+            const medicineById = new Map<string, MedicineLookup>();
+            ((data ?? []) as MedicineLookup[]).forEach((medicine: MedicineLookup) => {
+                medicineById.set(medicine.id, medicine);
+            });
+
+            const medicines = ids
+                .map((id) => medicineById.get(id))
+                .filter((medicine): medicine is MedicineLookup => medicine != null);
+
+            if (medicines.length < 2) {
+                res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+                res.status(200).json({ interactions: [] });
+                return;
+            }
+
+            const selectedGenerics = Array.from(
+                new Set(medicines.map((medicine) => normalizeGenericName(medicine.generic_name)))
+            );
+            const interactionByPair = indexInteractions(
+                await loadInteractionsForGenerics(selectedGenerics)
+            );
+            const isFallback = dbConfig?.isSupabaseOffline ?? true;
+            const interactions = [];
+
+            for (let i = 0; i < medicines.length; i++) {
+                for (let j = i + 1; j < medicines.length; j++) {
+                    const medicineA = medicines[i];
+                    const medicineB = medicines[j];
+                    const drugA = normalizeGenericName(medicineA.generic_name);
+                    const drugB = normalizeGenericName(medicineB.generic_name);
+                    const match = interactionByPair.get(getInteractionPairKey(drugA, drugB));
+                    const severity = mapSeverityTag(match?.severity);
+
+                    interactions.push({
+                        medicineAId: medicineA.id,
+                        medicineBId: medicineB.id,
+                        drugA: displayMedicineName(medicineA),
+                        drugAGeneric: drugA,
+                        drugB: displayMedicineName(medicineB),
+                        drugBGeneric: drugB,
+                        severity,
+                        sideEffects:
+                            match?.description ||
+                            "No known harmful interaction found between these medicines.",
+                        description:
+                            match?.description ||
+                            "No known harmful interaction found between these medicines.",
+                        precautions:
+                            match?.clinical_recommendation ||
+                            "Follow the prescribed dosage and consult a clinician if symptoms change.",
+                        mechanism: match?.mechanism || "No interaction mechanism is documented.",
+                        source: match?.source || "SahiDawa interaction checker",
+                        verified: !isFallback,
+                        disclaimer: isFallback
+                            ? "⚠️ Using offline interaction database. Data may be outdated. Consult a pharmacist."
+                            : undefined,
+                        last_updated_at: match?.last_updated_at,
+                    });
+                }
+            }
+
+            res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+            res.status(200).json({ interactions });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            logger.error(`Error checking interaction ids: ${msg}`);
+            res.status(500).json({ error: "Failed to check medicine interactions" });
+        }
     }
-});
+);
 
 /**
  * Normalizes brand names for offline fallback by removing dosages, units, and punctuation.
