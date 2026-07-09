@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-const title = "Find Pharmacy — SahiDawa";
+const title = "Medicine Safety Alerts - SahiDawa";
 const description =
-    "Locate verified Jan Aushadhi and trusted pharmacies near you on SahiDawa's live pharmacy map.";
+    "Track counterfeit, banned, and recalled medicine alerts across India with SahiDawa's public safety feed.";
 const image = "/icons/sahidawa-logo.png";
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     openGraph: {
         title,
         description,
-        url: "https://sahidawa.in/map",
+        url: "https://sahidawa.in/alerts",
         siteName: "SahiDawa",
         images: [{ url: image, width: 1200, height: 630, alt: title }],
     },
@@ -24,6 +24,6 @@ export const metadata: Metadata = {
     },
 };
 
-export default function MapLayout({ children }: { children: ReactNode }) {
+export default function AlertsLayout({ children }: { children: ReactNode }) {
     return <>{children}</>;
 }
