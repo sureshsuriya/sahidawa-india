@@ -284,8 +284,36 @@ def upsert_shoutout_record(db, record: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 def _static_fallback(pr: dict, tier_display: str) -> str:
     contributor_name = get_contributor_name(pr['author'])
+    pr_url = pr.get('url', 'N/A')
+    
     templates = [
-        "A huge shoutout to {name} for landing an outstanding {tier_display} contribution! 🚀\n\nThey just merged PR #{number}: \"{title}\".\n\nConnect with {name}: {linkedin_url}\n\nExplore the repository: {github_url}",
+        # Template 1: Mission-centric
+        "Another massive step forward for medicine safety! 🛡️\n\n"
+        "We are incredibly grateful to {name} for stepping up and delivering an exceptional {tier_display} contribution to SahiDawa.\n\n"
+        "Their recent work in PR #{number} (\"{title}\") resolves a key engineering challenge, bringing us one step closer to making healthcare tech accessible for millions.\n\n"
+        "Thank you, {name}, for your dedication and open-source craftsmanship! 🌟\n\n"
+        "Connect with {name}: {linkedin_url}\n\n"
+        "Want to contribute to India's open-source stack? Join the GSSoC 2026 wave on our repo:\n\n"
+        "Codebase: {github_url}\n"
+        "Merged PR: {pr_url}",
+        
+        # Template 2: Engineering-centric
+        "Building robust healthcare platforms takes serious engineering, and {name} just proved it! ⚙️\n\n"
+        "They successfully merged PR #{number} (\"{title}\"), tackling a {tier_display} issue with precision. Every line of code merged strengthens SahiDawa's core infrastructure and helps us scale to meet the needs of 1.4 billion people.\n\n"
+        "We are lucky to have developers like {name} in our community pushing the boundaries of what open-source can achieve. 🚀\n\n"
+        "Connect with {name}: {linkedin_url}\n\n"
+        "Want to contribute to India's open-source stack? Join the GSSoC 2026 wave on our repo:\n\n"
+        "Codebase: {github_url}\n"
+        "Merged PR: {pr_url}",
+        
+        # Template 3: Community-centric
+        "Our open-source community continues to amaze us! 🎉\n\n"
+        "Today, we want to spotlight {name} for their phenomenal work on SahiDawa. They took on a {tier_display} challenge (PR #{number}: \"{title}\") and delivered an outstanding solution that significantly improves our platform.\n\n"
+        "It's contributors like {name} who are driving the future of open health-tech in India. Keep shipping amazing code! 🔥\n\n"
+        "Connect with {name}: {linkedin_url}\n\n"
+        "Want to contribute to India's open-source stack? Join the GSSoC 2026 wave on our repo:\n\n"
+        "Codebase: {github_url}\n"
+        "Merged PR: {pr_url}"
     ]
     try:
         pr_idx = int(pr.get("number", "0")) % len(templates)
@@ -299,7 +327,8 @@ def _static_fallback(pr: dict, tier_display: str) -> str:
         tier_display=tier_display,
         number=pr['number'],
         title=pr['title'],
-        github_url=PROJECT_GITHUB_URL
+        github_url=PROJECT_GITHUB_URL,
+        pr_url=pr_url
     )
 
 def generate_post_with_groq(pr: dict, tier_display: str, tier_desc: str, system_prompt: str, user_prompt: str) -> str:
@@ -339,7 +368,7 @@ def generate_post_with_gemini(pr: dict, tier_display: str, tier_desc: str) -> st
     gemini_api_key = get_env_or_exit("GEMINI_API_KEY")
     contributor_name = get_contributor_name(pr['author'])
     system_prompt = (
-        "You are the Open-Source Maintainer for SahiDawa, India's medicine safety platform for 1.4 billion people. "
+        "You are the Open-Source Maintainer for SahiDawa, India's medicine safety platform. "
         "Write a heartfelt, highly engaging LinkedIn post thanking a contributor for their merged PR. Keep it within 3 short paragraphs.\n\n"
         "CRITICAL RULES FOR VARIABILITY (DO NOT IGNORE):\n"
         "- DO NOT always start with 'A huge shoutout' or 'Let's celebrate'. Use diverse, creative opening hooks focused on the real-world impact of the code.\n"
