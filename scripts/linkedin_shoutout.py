@@ -302,6 +302,39 @@ def _static_fallback(pr: dict, tier_display: str) -> str:
         github_url=PROJECT_GITHUB_URL
     )
 
+def generate_post_with_groq(pr: dict, tier_display: str, tier_desc: str, system_prompt: str, user_prompt: str) -> str:
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    if not groq_api_key:
+        return ""
+    
+    print("🔄 Attempting Groq API (Llama 3) fallback...")
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {groq_api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 800
+    }
+    
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        text = resp.json().get("choices", [])[0].get("message", {}).get("content", "").strip()
+        if len(text) > 100:
+            print("✅ Successfully generated post using Groq fallback!")
+            return text
+    except Exception as e:
+        print(f"⚠️ Groq API fallback failed: {e}")
+    return ""
+
+
 def generate_post_with_gemini(pr: dict, tier_display: str, tier_desc: str) -> str:
     gemini_api_key = get_env_or_exit("GEMINI_API_KEY")
     contributor_name = get_contributor_name(pr['author'])
@@ -340,14 +373,23 @@ def generate_post_with_gemini(pr: dict, tier_display: str, tier_desc: str) -> st
         try:
             resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=30)
             if resp.status_code == 429:
+                print(f"⚠️ Gemini Rate Limit Exceeded (Attempt {attempt}). Waiting 20s...")
                 time.sleep(20)
                 continue
             resp.raise_for_status()
             text = resp.json().get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "").strip()
             if len(text) > 100:
                 return text
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Gemini API attempt {attempt} failed: {e}")
             time.sleep(10)
+            
+    # Try Groq API if Gemini completely fails
+    groq_content = generate_post_with_groq(pr, tier_display, tier_desc, system_prompt, user_prompt)
+    if groq_content:
+        return groq_content
+        
+    print("🔄 AI generation completely failed. Falling back to static template.")
     return _static_fallback(pr, tier_display)
 
 def assemble_final_post(ai_content: str, pr: dict) -> str:
