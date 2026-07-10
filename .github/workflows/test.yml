@@ -96,6 +96,10 @@ jobs:
               env:
                   WHISPER_MODEL_SIZE: base
                   PYTHONPATH: ${{ github.workspace }}
+                  # Dummy key so code paths that expect GEMINI_API_KEY (triage
+                  # LLM via get_llm, embeddings via embed_query) don't fail in
+                  # CI. Tests mock the LLM, so no real API call is ever made.
+                  GEMINI_API_KEY: mock_api_key_for_testing
 
     test-docker-builds:
         name: 🐳 Test Docker Builds
