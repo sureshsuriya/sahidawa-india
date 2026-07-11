@@ -505,7 +505,27 @@ def generate_and_upload_image(pr: dict, access_token: str, org_urn: str) -> str 
             
     except Exception as e:
         print(f"⚠️ Gemini API Image generation failed: {e}")
-        return None
+        print("↩️ Falling back to GitHub PR OpenGraph image...")
+        try:
+            repo = os.environ.get('GITHUB_REPOSITORY', 'RatLoopz/sahidawa-india')
+            pr_number = pr.get('number')
+            og_url = f"https://opengraph.githubassets.com/1/{repo}/pull/{pr_number}"
+            
+            og_resp = requests.get(og_url, timeout=30)
+            og_resp.raise_for_status()
+            
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(og_resp.content))
+            width, height = img.size
+            # Crop the bottom 30% of the image (keeps the title and stats, removes comments)
+            cropped = img.crop((0, 0, width, int(height * 0.70)))
+            
+            cropped.save(comic_path, format="PNG")
+            print("✅ GitHub OG fallback image cropped and saved successfully.")
+        except Exception as fallback_e:
+            print(f"⚠️ GitHub OG fallback failed: {fallback_e}")
+            return None
 
     # Step 2 — Register upload with LinkedIn
     print("📤 Registering image upload with LinkedIn...")
