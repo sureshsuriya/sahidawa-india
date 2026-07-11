@@ -73,7 +73,7 @@ git checkout -b docs/setup-guide
 
 Follow the [Coding Standards](#coding-standards) below.
 
-### Step 5 — Test your changes
+### Step 5 — Test and Audit your changes
 
 ```bash
 # Frontend tests
@@ -87,7 +87,20 @@ cd apps/ml && pytest
 
 # Lint check
 npm run lint
+
+# Run security dependency audits
+npm run audit:all
 ```
+
+#### Security Dependency Audits
+
+SahiDawa runs security dependency vulnerability audits before every git push to keep our packages safe.
+
+- **Node Audits (`npm run audit:node`):** Checks dependencies in `apps/api` and `apps/web` and fails if high/critical vulnerabilities are found.
+- **Python Audits (`npm run audit:python`):** Checks dependencies in `apps/ml` and `apps/etl` using `pip-audit`. Make sure you have `pip-audit` installed in your environment (`pip install pip-audit`).
+- **Run all audits manually (`npm run audit:all`):** Runs both Node and Python audits.
+
+The pre-push git hook will automatically run `npm run audit:all` and block pushes if vulnerabilities are detected.
 
 ### Step 6 — Commit and push
 
@@ -468,6 +481,7 @@ test(api): add unit tests for medicine verification endpoint
 - [ ] I have formatted my code using Prettier (`npx prettier --write .`)
 - [ ] All tests pass (`npm run test` and/or `pytest`)
 - [ ] Lint passes (`npm run lint`)
+- [ ] Security audits pass (`npm run audit:all`)
 - [ ] I have tested on mobile viewport (Chrome DevTools)
 - [ ] I have written tests for new functionality
 - [ ] I have updated documentation if needed
