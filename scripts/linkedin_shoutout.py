@@ -18,10 +18,7 @@ import json
 import requests
 import traceback
 from datetime import datetime, timedelta, timezone
-try:
-    from supabase import create_client, Client
-except ImportError:
-    pass # Will be handled by requirements/setup
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PROJECT CONFIG — Edit these to change branding
@@ -249,35 +246,7 @@ def get_contributor_name(github_username: str) -> str:
     return github_username
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SUPABASE INITIALIZATION & STATE MANAGEMENT
-# ─────────────────────────────────────────────────────────────────────────────
-def get_supabase_client():
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        print("⚠️ Missing Supabase credentials. Continuing without state persistence.")
-        return None
-    return create_client(url, key)
 
-def get_shoutout_record(db, pr_number: int):
-    if not db:
-        return None
-    try:
-        response = db.table('linkedin_shoutouts').select('*').eq('pr_number', pr_number).execute()
-        if response.data:
-            return response.data[0]
-    except Exception as e:
-        print(f"⚠️ DB Error fetching record: {e}")
-    return None
-
-def upsert_shoutout_record(db, record: dict):
-    if not db:
-        return
-    try:
-        db.table('linkedin_shoutouts').upsert(record).execute()
-    except Exception as e:
-        print(f"⚠️ DB Error upserting record: {e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONTENT GENERATION
@@ -368,18 +337,21 @@ def generate_post_with_gemini(pr: dict, tier_display: str, tier_desc: str) -> st
     contributor_name = get_contributor_name(pr['author'])
     system_prompt = (
         "You are the Open-Source Maintainer for SahiDawa, India's medicine safety platform. "
-        "Write a clean, professional, and direct LinkedIn post acknowledging a contributor's merged PR. Keep it within 3 short paragraphs.\n\n"
-        "CRITICAL RULES FOR TONE AND VARIABILITY (NO BS POLICY):\n"
-        "- NO SUGAR-COATING. Do not use overly enthusiastic, exaggerated, or fluffy language (e.g., avoid 'massive shoutout', 'incredible', 'mind-blowing').\n"
-        "- Keep it raw, technical, and high-signal. Focus purely on the engineering facts and the direct impact of the code.\n"
+        "Write an engaging, appreciative, and detailed LinkedIn post acknowledging a contributor's merged PR. "
+        "The post should celebrate their effort while diving deep into the technical impact. Make it long, story-driven, and highly engaging.\n\n"
+        "CRITICAL RULES FOR TONE AND VARIABILITY:\n"
+        "- Be warm and appreciative. Celebrate the contributor's success! \n"
+        "- Tell a story: What was the problem? How did they solve it? What is the impact?\n"
+        "- Make it a detailed, long-form post that engages readers and developers.\n"
         "- Do not use robotic templates. Weave the facts naturally.\n"
-        "- Use minimal, professional emojis (e.g., 🚀, 🛡️, ⚙️) if needed, but do not overuse them.\n\n"
+        "- Use professional emojis (e.g., 🚀, 🛡️, ⚙️, 👏, 🔥) appropriately to break up the text.\n\n"
         "FRAMEWORK TO FOLLOW:\n"
-        "1. The Core Update: State exactly what was merged and its direct technical or product impact.\n"
-        "2. The Contributor: Acknowledge the contributor by name (no @github handles) for tackling the specified Task Tier.\n"
-        "3. The Mechanism: Briefly explain how the code works (based on the git diff).\n"
-        "4. The Connection: Include 'Connect with [Name]: [LinkedIn URL]'.\n"
-        "5. The Call to Action: End EXACTLY with this text (do not modify this footer):\n\n"
+        "1. The Hook: A strong opening celebrating the merge and the contributor's effort.\n"
+        "2. The Problem: What was the challenge or bug that needed fixing?\n"
+        "3. The Solution & Mechanism: Explain deeply how they solved it, referencing the actual technical changes (based on the git diff).\n"
+        "4. The Impact: How does this help SahiDawa scale or improve user experience?\n"
+        "5. The Connection: Include 'Connect with [Name]: [LinkedIn URL]'.\n"
+        "6. The Call to Action: End EXACTLY with this text (do not modify this footer):\n\n"
         "Want to contribute to India's open-source stack? Join the GSSoC 2026 wave on our repo:\n\n"
         "Codebase: [Insert Codebase URL]\n"
         "Merged PR: [Insert PR URL]"
@@ -474,19 +446,6 @@ def main():
     print("=" * 60)
 
     pr = get_pr_metadata()
-    try:
-        pr_number_int = int(pr['number'])
-    except:
-        pr_number_int = 0
-
-    db = get_supabase_client()
-    
-    # Idempotency Check
-    if db and pr_number_int > 0:
-        record = get_shoutout_record(db, pr_number_int)
-        if record and record.get('status') == 'POSTED':
-            print("✅ This PR has already been successfully posted to LinkedIn. Exiting.")
-            sys.exit(0)
 
     tier_display, tier_desc = determine_tier(pr["labels"])
     pr["linkedin_url"] = validate_linkedin_url(pr)
@@ -496,29 +455,10 @@ def main():
     ai_content = generate_post_with_gemini(pr, tier_display, tier_desc)
     final_post = assemble_final_post(ai_content, pr)
 
-    # Initialize Record
-    if db and pr_number_int > 0:
-        record = get_shoutout_record(db, pr_number_int) or {}
-        record.update({
-            "pr_number": pr_number_int,
-            "pr_url": pr['url'],
-            "author": pr['author'],
-            "labels": pr['labels'],
-            "status": "PENDING",
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        })
-        upsert_shoutout_record(db, record)
-
     # Try Posting
     try:
         post_to_linkedin(final_post, pr)
         
-        # Success
-        if db and pr_number_int > 0:
-            record["status"] = "POSTED"
-            record["error_log"] = None
-            upsert_shoutout_record(db, record)
-
         # Notify Github Actions to post comment
         github_output = os.environ.get("GITHUB_OUTPUT")
         if github_output:
@@ -529,21 +469,6 @@ def main():
     except Exception as e:
         print(f"❌ Failed to post to LinkedIn: {e}")
         traceback.print_exc()
-        
-        if db and pr_number_int > 0:
-            retry_count = record.get("retry_count", 0) + 1
-            # Exponential backoff: 2, 4, 8, 16 hours
-            backoff_hours = min(2 ** retry_count, 72)
-            next_retry = datetime.now(timezone.utc) + timedelta(hours=backoff_hours)
-            
-            record.update({
-                "status": "FAILED",
-                "error_log": str(e),
-                "retry_count": retry_count,
-                "next_retry_at": next_retry.isoformat()
-            })
-            upsert_shoutout_record(db, record)
-            print(f"Scheduled for retry at {next_retry.isoformat()}")
         
         # Exit with error code 0 so github action succeeds but skips commenting
         sys.exit(0)
