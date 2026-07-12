@@ -88,6 +88,11 @@ describe("Expiry Tracker Notifications Library", () => {
         });
     });
 
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+    });
+
     describe("getNotificationTargets", () => {
         it("calculates exact target dates 7 days and 1 day before expiry at 9:00 AM", () => {
             const expiryDateStr = "2026-07-10T00:00:00.000Z";
