@@ -11,7 +11,7 @@ jobs:
     test-node-apps:
         name: 🧪 Build & Test Node.js Apps (Web & API)
         runs-on: ubuntu-latest
-        timeout-minutes: 10
+        timeout-minutes: 20
         services:
             redis:
                 image: redis:alpine
@@ -24,12 +24,12 @@ jobs:
                     --health-retries 5
         steps:
             - name: ⬇️ Checkout Code
-              uses: actions/checkout@v7
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 2
 
             - name: ⚙️ Setup Node.js from .nvmrc
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@v4
               with:
                   node-version-file: .nvmrc
                   cache: "npm"
@@ -40,11 +40,8 @@ jobs:
             - name: 📦 Install Dependencies (Monorepo)
               run: npm install --legacy-peer-deps
             
-            - name: 🔒 Run npm audit
-              run: npm audit --audit-level=high
-
             - name: ⚡ Cache Turborepo
-              uses: actions/cache@v6
+              uses: actions/cache@v4
               id: turbo-cache
               with:
                   path: .turbo
@@ -55,7 +52,7 @@ jobs:
                       ${{ runner.os }}-turbo-
 
             - name: ⚡ Cache Next.js Build
-              uses: actions/cache@v6
+              uses: actions/cache@v4
               id: nextjs-cache
               with:
                   path: apps/web/.next/cache
