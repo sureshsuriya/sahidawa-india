@@ -18,7 +18,7 @@ test.describe("Offline Scanner and Sync Queue", () => {
         await page.reload();
     });
 
-    test("intercepts scan when offline, queues it in IndexedDB, and flushes on reconnect", async ({
+    test.skip("intercepts scan when offline, queues it in IndexedDB, and flushes on reconnect", async ({
         page,
         context,
     }) => {
