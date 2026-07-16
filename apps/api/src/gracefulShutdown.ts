@@ -2,8 +2,9 @@ import type { Server } from "http";
 import { supabase } from "./db/client";
 import logger from "./utils/logger";
 import { redisClient } from "./utils/redis";
+import { jobScheduler } from "./services/jobScheduler.service";
 
-type ShutdownReason = "uncaughtException" | "unhandledRejection";
+type ShutdownReason = "uncaughtException" | "unhandledRejection" | "SIGTERM" | "SIGINT";
 
 type ShutdownOptions = {
     exitProcess?: (code: number) => never | void;
@@ -72,7 +73,7 @@ export function createGracefulShutdown(server: Server, options: ShutdownOptions 
     const timeoutMs = options.timeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
     let isShuttingDown = false;
 
-    return async (reason: ShutdownReason, error: unknown): Promise<void> => {
+    return async (reason: ShutdownReason, error?: unknown): Promise<void> => {
         if (isShuttingDown) {
             logger.warn("Graceful shutdown already in progress", { reason });
             return;
@@ -81,7 +82,7 @@ export function createGracefulShutdown(server: Server, options: ShutdownOptions 
         isShuttingDown = true;
         logger.error(`${reason} detected. Starting graceful shutdown.`, {
             reason,
-            error: getErrorDetails(error),
+            ...(error !== undefined ? { error: getErrorDetails(error) } : {}),
         });
 
         const timeout = setTimeout(() => {
@@ -94,6 +95,9 @@ export function createGracefulShutdown(server: Server, options: ShutdownOptions 
         timeout.unref();
 
         try {
+            jobScheduler.shutdown();
+            logger.info("Background jobs stopped during graceful shutdown", { reason });
+
             await closeServer(server);
             logger.info("HTTP server closed during graceful shutdown", { reason });
 
@@ -106,7 +110,7 @@ export function createGracefulShutdown(server: Server, options: ShutdownOptions 
             });
         } finally {
             clearTimeout(timeout);
-            exitProcess(1);
+            exitProcess(error !== undefined ? 1 : 0);
         }
     };
 }
