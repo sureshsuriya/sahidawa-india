@@ -91,7 +91,7 @@
             "apps/api/src/routes/abha.ts",
             "apps/api/src/routes/notifications.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-055-sec-enhanced-rate-limitingto-use-keys-alongside-ip.md",
         "docPath": "docs/devtrack/2026-07/PR-3629-sec-enhanced-rate-limitingto-use-keys-alongside-ip-3605.md"
     },
     {
@@ -142,7 +142,7 @@
             "apps/web/lib/medicineDateUtils.ts",
             "apps/web/tests/medicineDateUtils.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-054-fix-web-robust-formattime-helper-to-prevent-schedu.md",
         "docPath": "docs/devtrack/2026-07/PR-3613-fix-web-robust-formattime-helper-to-prevent-schedule-page-nans-crashes.md"
     },
     {
@@ -174,7 +174,7 @@
             "apps/web/hooks/useAlerts.ts",
             "supabase/migrations/20260713120000_add_alerts_aggregate_stats_rpc.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-052-fix-paginated-calculations-on-live-alerts-log-stat.md",
         "docPath": "docs/devtrack/2026-07/PR-3592-fix-paginated-calculations-on-live-alerts-log-stats-panel-3001.md"
     },
     {
@@ -220,7 +220,7 @@
             "apps/api/src/services/cache.service.ts",
             "apps/api/src/services/cache.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-053-feat-cache-implement-stale-value-fallback-and-disc.md",
         "docPath": "docs/devtrack/2026-07/PR-3582-feat-cache-implement-stale-value-fallback-and-discord-alerting-on-redis-stat-failures-3579.md"
     },
     {
@@ -266,7 +266,7 @@
             "apps/api/src/services/governmentEligibility.ts",
             "apps/api/tests/eligibility.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-050-feat-api-implement-pm-jay-eligibility-api-integrat.md",
         "docPath": "docs/devtrack/2026-07/PR-3534-feat-api-implement-pm-jay-eligibility-api-integration-3136.md"
     },
     {
@@ -300,7 +300,7 @@
             "apps/ml/tests/test_triage_graph.py",
             "apps/ml/tests/test_triage_session_persistence.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-051-perf-ml-remove-redundant-event-loops-from-triage-f.md",
         "docPath": "docs/devtrack/2026-07/PR-3510-perf-ml-remove-redundant-event-loops-from-triage-flow.md"
     },
     {
@@ -354,7 +354,7 @@
             "apps/web/tests/searchQueue.test.ts",
             "apps/web/tests/usePendingSearchQueue.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-049-feat-web-preserve-offline-search-history.md",
         "docPath": "docs/devtrack/2026-07/PR-3500-feat-web-preserve-offline-search-history.md"
     },
     {
@@ -371,7 +371,7 @@
             "apps/ml/services/triage_graph.py",
             "apps/ml/tests/test_triage_session_persistence.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-048-feat-ml-add-post-triage-clear-endpoint-for-session.md",
         "docPath": "docs/devtrack/2026-07/PR-3489-feat-ml-add-post-triage-clear-endpoint-for-session-reset.md"
     },
     {
@@ -389,7 +389,7 @@
             "apps/web/hooks/usePendingSearchQueue.ts",
             "apps/web/lib/db/searchQueue.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-048-feat-wired-homepage-search-into-the-existing-offli.md",
         "docPath": "docs/devtrack/2026-07/PR-3467-feat-wired-homepage-search-into-the-existing-offline-queue-3437.md"
     },
     {
@@ -435,7 +435,7 @@
             "apps/web/package.json",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-047-ref-migrated-alerts-pagination-fetching-to-tanstac.md",
         "docPath": "docs/devtrack/2026-07/PR-3359-ref-migrated-alerts-pagination-fetching-to-tanstack-react-query-2973.md"
     },
     {
@@ -563,7 +563,7 @@
             "packages/shared/src/limits.ts",
             "packages/shared/tsconfig.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-045-refactor-unify-shared-constants.md",
         "docPath": "docs/devtrack/2026-07/PR-3186-refactor-unify-shared-constants.md"
     },
     {
@@ -597,7 +597,7 @@
             "apps/web/messages/te.json",
             "apps/web/messages/ur.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-045-feat-profile-add-next-intl-localization-to-profile.md",
         "docPath": "docs/devtrack/2026-07/PR-3089-feat-profile-add-next-intl-localization-to-profile-page.md"
     },
     {
@@ -639,7 +639,7 @@
             "apps/api/src/middleware/apiKeyAuth.ts",
             "supabase/migrations/20260704000000_add_key_salt_to_api_keys.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-042-fix-security-replace-static-pbkdf2-salt-with-per-k.md",
         "docPath": "docs/devtrack/2026-07/PR-3060-fix-security-replace-static-pbkdf2-salt-with-per-key-random-salt.md"
     },
     {
@@ -672,7 +672,7 @@
             "apps/web/components/RequestVerificationModal.tsx",
             "supabase/migrations/20260703000000_create_medicine_verification_requests.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-043-feat-admin-add-ocr-verification-approval-queue-das.md",
         "docPath": "docs/devtrack/2026-07/PR-3029-feat-admin-add-ocr-verification-approval-queue-dashboard-2944.md"
     },
     {
@@ -689,7 +689,7 @@
             "supabase/migrations/20260627010000_fix_search_medicines_text_trgm_usage.sql",
             "supabase/migrations/20260628160000_add_composition_trgm_index.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-043-fix-db-align-medicine-search-functions-with-curren.md",
         "docPath": "docs/devtrack/2026-07/PR-3009-fix-db-align-medicine-search-functions-with-current-schema.md"
     },
     {
@@ -707,7 +707,7 @@
             "apps/web/hooks/useMedicineTracker.ts",
             "supabase/migrations/20260701000000_add_snoozed_until_to_expiry_tracker.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-046-adding-snooze-functionality-to-tracker.md",
         "docPath": "docs/devtrack/2026-07/PR-3006-adding-snooze-functionality-to-tracker.md"
     },
     {
@@ -739,7 +739,7 @@
             "apps/ml/services/triage_graph.py",
             "supabase/migrations/20260627000001_fix_district_alerts_uniqueness.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-044-feat-langgraph-rag-retrieval-clean.md",
         "docPath": "docs/devtrack/2026-07/PR-2998-feat-langgraph-rag-retrieval-clean.md"
     },
     {
@@ -773,7 +773,7 @@
             "apps/web/messages/te.json",
             "apps/web/messages/ur.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-041-feat-i18n-localize-abha-records-fix-regional-trans.md",
         "docPath": "docs/devtrack/2026-07/PR-2991-feat-i18n-localize-abha-records-fix-regional-translation-json-structures.md"
     },
     {
@@ -944,7 +944,7 @@
             "apps/web/components/reports/ReportWizard.tsx",
             "apps/web/src/components/AuthProvider.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-040-ref-memoized-supabase-browser-client-instantiation.md",
         "docPath": "docs/devtrack/2026-06/PR-2432-ref-memoized-supabase-browser-client-instantiation-to-prevent-memoy-leaks-2363.md"
     },
     {
@@ -1007,7 +1007,7 @@
             "apps/web/messages/ur.json",
             "apps/web/tests/signup-page.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-039-feat-auth-add-signup-page-with-email-and-oauth-reg.md",
         "docPath": "docs/devtrack/2026-06/PR-2371-feat-auth-add-signup-page-with-email-and-oauth-registration.md"
     },
     {
@@ -1042,7 +1042,7 @@
             "supabase/migrations/20260621000000_add_pharmacies_updated_at.sql",
             "supabase/migrations/20260621000001_add_pharmacy_delta_sync_rpc.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-038-feat-sync-delta-sync-for-pharmacy-map-bounds-endpo.md",
         "docPath": "docs/devtrack/2026-06/PR-2323-feat-sync-delta-sync-for-pharmacy-map-bounds-endpoint-phase-1-of-2260.md"
     },
     {
@@ -1082,7 +1082,7 @@
             "apps/web/messages/te.json",
             "apps/web/messages/ur.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-037-fix-add-missing-translation-keys-for-vaccine-secti.md",
         "docPath": "docs/devtrack/2026-06/PR-2219-fix-add-missing-translation-keys-for-vaccine-section.md"
     },
     {
@@ -1095,7 +1095,7 @@
         "linkedIssue": "#1494",
         "labels": "",
         "filesChanged": [],
-        "adr": null,
+        "adr": "adr/ADR-036-feat-pharmacy-implement-localized-bulk-medicine-in.md",
         "docPath": "docs/devtrack/2026-06/PR-2151-feat-pharmacy-implement-localized-bulk-medicine-inventory-upload-framework.md"
     },
     {
@@ -1137,7 +1137,7 @@
             "apps/api/src/routes/pharmacies.ts",
             "supabase/migrations/20260619000000_add_created_by_to_pharmacies.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-035-security-api-enforce-authentication-on-pharmacy-re.md",
         "docPath": "docs/devtrack/2026-06/PR-2061-security-api-enforce-authentication-on-pharmacy-registration-endpoi.md"
     },
     {
@@ -1181,7 +1181,7 @@
             "apps/api/tests/notifications.test.ts",
             "apps/api/tests/twilioWebhookSignature.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-034-fix-api-verify-twilio-webhook-signatures-on-notifi.md",
         "docPath": "docs/devtrack/2026-06/PR-2004-fix-api-verify-twilio-webhook-signatures-on-notification-route.md"
     },
     {
@@ -1211,7 +1211,7 @@
             "apps/api/src/routes/verify.ts",
             "apps/api/src/utils/originCheck.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-034-feat-api-add-origin-validation-to-batch-report-end.md",
         "docPath": "docs/devtrack/2026-06/PR-1972-feat-api-add-origin-validation-to-batch-report-endpoint-closes-1937.md"
     },
     {
@@ -1229,7 +1229,7 @@
             "apps/web/app/[locale]/profile/page.tsx",
             "apps/web/app/[locale]/settings/page.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-033-feat-web-replace-custom-back-buttons-with-pagehead.md",
         "docPath": "docs/devtrack/2026-06/PR-1939-feat-web-replace-custom-back-buttons-with-pageheader.md"
     },
     {
@@ -1276,7 +1276,7 @@
             "apps/api/src/services/cache.service.ts",
             "apps/api/src/services/drugLookup.service.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-032-fix-security-resolve-codeql-vulnerabilities-sql-in.md",
         "docPath": "docs/devtrack/2026-06/PR-1746-fix-security-resolve-codeql-vulnerabilities-sql-injection-log-inj.md"
     },
     {
@@ -1342,7 +1342,7 @@
             "apps/web/messages/hi.json",
             "supabase/migrations/20260611000000_add_drug_interactions.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-031-feat-implement-medicine-interaction-checker-closes.md",
         "docPath": "docs/devtrack/2026-06/PR-1694-feat-implement-medicine-interaction-checker-closes-1626.md"
     },
     {
@@ -1380,7 +1380,7 @@
             "apps/api/src/utils/redis.ts",
             "apps/api/tests/cache.service.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-031-feat-implement-redis-tiered-caching-and-cache-warm.md",
         "docPath": "docs/devtrack/2026-06/PR-1640-feat-implement-redis-tiered-caching-and-cache-warming-for-cdsco-drug-lookup.md"
     },
     {
@@ -1415,7 +1415,7 @@
             "apps/web/lib/adminAuth.ts",
             "apps/web/tests/admin-dashboard-role-gating.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-030-feat-admin-gate-mutation-controls-by-role.md",
         "docPath": "docs/devtrack/2026-06/PR-1589-feat-admin-gate-mutation-controls-by-role.md"
     },
     {
@@ -1461,7 +1461,7 @@
             "apps/web/app/[locale]/components/Navbar.tsx",
             "apps/web/app/components/health/ChatUI.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-029-feat-add-home-navigation-to-chat-interface.md",
         "docPath": "docs/devtrack/2026-06/PR-1510-feat-add-home-navigation-to-chat-interface.md"
     },
     {
@@ -1548,7 +1548,7 @@
             "apps/web/public/sw.js",
             "apps/web/tests/upload-route.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-028-fix-resolve-unused-component-and-hook-variables-in.md",
         "docPath": "docs/devtrack/2026-06/PR-1476-fix-resolve-unused-component-and-hook-variables-in-web-app.md"
     },
     {
@@ -1579,7 +1579,7 @@
             "apps/web/app/[locale]/scan/page.tsx",
             "apps/web/lib/db/scanHistory.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-027-feat-add-scan-history-feature.md",
         "docPath": "docs/devtrack/2026-06/PR-1469-feat-add-scan-history-feature.md"
     },
     {
@@ -1718,7 +1718,7 @@
         "linkedIssue": "#1267",
         "labels": "",
         "filesChanged": [],
-        "adr": null,
+        "adr": "adr/ADR-026-critical-refactor-extract-shared-fetch-timeout-ret.md",
         "docPath": "docs/devtrack/2026-06/PR-1270-critical-refactor-extract-shared-fetch-timeout-retry-logic-from-duplicated-supabase-client-files.md"
     },
     {
@@ -1784,7 +1784,7 @@
             "apps/web/app/api/chat/route.ts",
             "apps/web/app/api/voice/tts/route.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-024-feat-voice-add-cloud-text-to-speech-for-voice-tria.md",
         "docPath": "docs/devtrack/2026-06/PR-1242-feat-voice-add-cloud-text-to-speech-for-voice-triage-results.md"
     },
     {
@@ -1828,7 +1828,7 @@
             "apps/web/messages/ur.json",
             "apps/web/src/components/ComparisonGrid.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-024-fix-localize-alerts-log-and-compare-grid.md",
         "docPath": "docs/devtrack/2026-06/PR-1237-fix-localize-alerts-log-and-compare-grid.md"
     },
     {
@@ -1884,7 +1884,7 @@
             "apps/web/components/vaccine/VaccineSelector.tsx",
             "apps/web/components/vaccine/index.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-024-vaccine-hub-ui-refactor-implementation-complete.md",
         "docPath": "docs/devtrack/2026-06/PR-1219-vaccine-hub-ui-refactor-implementation-complete.md"
     },
     {
@@ -1977,7 +1977,7 @@
             "data/seeds/map_seed.sql",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-023-feat-verify-and-extend-pharmacy-asha-worker-map-wi.md",
         "docPath": "docs/devtrack/2026-06/PR-1160-feat-verify-and-extend-pharmacy-asha-worker-map-with-leaflet-js-1132.md"
     },
     {
@@ -2047,7 +2047,7 @@
             "apps/web/postcss.config.mjs",
             "apps/web/scripts/voice-a11y-audit.mjs"
         ],
-        "adr": null,
+        "adr": "adr/ADR-025-fix-web-add-prettier-scripts-and-format-files.md",
         "docPath": "docs/devtrack/2026-06/PR-1152-fix-web-add-prettier-scripts-and-format-files.md"
     },
     {
@@ -2082,7 +2082,7 @@
             "apps/api/src/routes/scan.ts",
             "apps/api/src/routes/verify.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-022-fix-api-handle-missing-async-error-rejections-in-r.md",
         "docPath": "docs/devtrack/2026-06/PR-1135-fix-api-handle-missing-async-error-rejections-in-routes-1061.md"
     },
     {
@@ -2102,7 +2102,7 @@
             "apps/web/tests/back-to-top-button.test.tsx",
             "apps/web/tests/chatbot-position.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-022-feat-ui-refactor-monolithic-home-page-layout-into-.md",
         "docPath": "docs/devtrack/2026-06/PR-1127-feat-ui-refactor-monolithic-home-page-layout-into-atomic-accessible.md"
     },
     {
@@ -2115,7 +2115,7 @@
         "linkedIssue": "",
         "labels": "",
         "filesChanged": [],
-        "adr": null,
+        "adr": "adr/ADR-021-seo-fix.md",
         "docPath": "docs/devtrack/2026-06/PR-1125-seo-fix.md"
     },
     {
@@ -2147,7 +2147,7 @@
         "linkedIssue": "#1105",
         "labels": "",
         "filesChanged": ["apps/api/src/middleware/rateLimit.ts", "apps/api/src/routes/lasa.ts"],
-        "adr": null,
+        "adr": "adr/ADR-020-fix-lasa-add-lasalimiter-and-cap-medicinename-leng.md",
         "docPath": "docs/devtrack/2026-06/PR-1114-fix-lasa-add-lasalimiter-and-cap-medicinename-length-on-check-endpoint.md"
     },
     {
@@ -2166,7 +2166,7 @@
             "package-lock.json",
             "package.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-020-fix-ui-correct-coordinates-tracking-data-and-layou.md",
         "docPath": "docs/devtrack/2026-06/PR-1112-fix-ui-correct-coordinates-tracking-data-and-layout-bugs-in-pharmac.md"
     },
     {
@@ -2196,7 +2196,7 @@
             "apps/ml/routers/verify.py",
             "apps/ml/tests/test_verify.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-020-feat-ml-add-cdsco-batch-recall-and-expiry-verifier.md",
         "docPath": "docs/devtrack/2026-06/PR-1108-feat-ml-add-cdsco-batch-recall-and-expiry-verifier-endpoint.md"
     },
     {
@@ -2249,7 +2249,7 @@
             "apps/web/app/[locale]/map/loading.tsx",
             "apps/web/app/[locale]/map/page.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-019-fixes-white-flash-on-pharmacy-map-page-navigation-.md",
         "docPath": "docs/devtrack/2026-06/PR-1095-fixes-white-flash-on-pharmacy-map-page-navigation-in-dark-theme.md"
     },
     {
@@ -2283,7 +2283,7 @@
             "apps/web/messages/hi.json",
             "apps/web/messages/ml.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-020-enhance-landing-page-ui-and-mobile-responsiveness.md",
         "docPath": "docs/devtrack/2026-06/PR-1072-enhance-landing-page-ui-and-mobile-responsiveness.md"
     },
     {
@@ -2391,7 +2391,7 @@
             "apps/web/messages/en.json",
             "apps/web/tests/verification-share.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-017-feat-scan-share-verification-results.md",
         "docPath": "docs/devtrack/2026-05/PR-1011-feat-scan-share-verification-results.md"
     },
     {
@@ -2410,7 +2410,7 @@
             "apps/web/next.config.mjs",
             "apps/web/proxy.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-017-fix-833-optimize-load-time-with-lazy-loading-and-i.md",
         "docPath": "docs/devtrack/2026-05/PR-999-fix-833-optimize-load-time-with-lazy-loading-and-image-optimization.md"
     },
     {
@@ -2430,7 +2430,7 @@
             "apps/web/app/[locale]/page.tsx",
             "supabase/migrations/20260531000000_drop_mrp_gte_jan_aushadhi_price_constraint.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-017-fix-drop-mrp-gte-jan-aushadhi-price-constraint.md",
         "docPath": "docs/devtrack/2026-05/PR-988-fix-drop-mrp-gte-jan-aushadhi-price-constraint.md"
     },
     {
@@ -2448,7 +2448,7 @@
             "apps/web/app/[locale]/components/ThemeToggle.tsx",
             "apps/web/app/[locale]/page.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-017-fixes-moderator-users-can-access-admin-ui-but-api-.md",
         "docPath": "docs/devtrack/2026-05/PR-987-fixes-moderator-users-can-access-admin-ui-but-api-rejects-all-admin-actions-with-403.md"
     },
     {
@@ -2466,7 +2466,7 @@
             "apps/web/app/components/health/components/TrustBar.tsx",
             "apps/web/tests/chatbot-position.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-016-bug-responsive-chat-and-dark-mode.md",
         "docPath": "docs/devtrack/2026-05/PR-941-bug-responsive-chat-and-dark-mode.md"
     },
     {
@@ -2493,7 +2493,7 @@
             "apps/web/messages/te.json",
             "apps/web/messages/ur.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-018-fix-767-i18n-missing-translation-about-us.md",
         "docPath": "docs/devtrack/2026-05/PR-934-fix-767-i18n-missing-translation-about-us.md"
     },
     {
@@ -2555,7 +2555,7 @@
             "apps/web/app/api/chat/route.ts",
             "supabase/migrations/20260527000000_add_batches_manufacturers.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-017-feat-batch-traceability.md",
         "docPath": "docs/devtrack/2026-05/PR-904-feat-batch-traceability.md"
     },
     {
@@ -2589,7 +2589,7 @@
             "apps/api/tests/adminLogs.test.ts",
             "apps/web/app/[locale]/admin/dashboard/page.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-015-feat-admin-implement-audit-logs-dashboard-integrat.md",
         "docPath": "docs/devtrack/2026-05/PR-899-feat-admin-implement-audit-logs-dashboard-integration.md"
     },
     {
@@ -2658,7 +2658,7 @@
             "supabase/migrations/20260530000000_create_pharmacy_rpc_functions.sql",
             "supabase/migrations/20260530000001_seed_jan_aushadhi_pharmacies.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-014-feat-real-nearby-pharmacy-search-using-supabase-po.md",
         "docPath": "docs/devtrack/2026-05/PR-857-feat-real-nearby-pharmacy-search-using-supabase-post-gis.md"
     },
     {
@@ -2671,7 +2671,7 @@
         "linkedIssue": "#587",
         "labels": "",
         "filesChanged": [],
-        "adr": null,
+        "adr": "adr/ADR-013-feat-ml-connect-medicine-image-analysis.md",
         "docPath": "docs/devtrack/2026-05/PR-845-feat-ml-connect-medicine-image-analysis.md"
     },
     {
@@ -2725,7 +2725,7 @@
             "apps/web/proxy.ts",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-013-fix-admin-dashboard-auth.md",
         "docPath": "docs/devtrack/2026-05/PR-834-fix-admin-dashboard-auth.md"
     },
     {
@@ -2785,7 +2785,7 @@
             "apps/web/messages/ur.json",
             "apps/web/tests/homepage-i18n.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-012-fix-i18n-localize-homepage-navigation-strings.md",
         "docPath": "docs/devtrack/2026-05/PR-778-fix-i18n-localize-homepage-navigation-strings.md"
     },
     {
@@ -2805,7 +2805,7 @@
             "apps/web/tests/chat-route.test.ts",
             "apps/web/tests/i18n-locales.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-011-fix-web-enable-kannada-and-punjabi-locales.md",
         "docPath": "docs/devtrack/2026-05/PR-773-fix-web-enable-kannada-and-punjabi-locales.md"
     },
     {
@@ -2864,7 +2864,7 @@
             "apps/web/package.json",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-010-feat-web-add-back-to-top-button.md",
         "docPath": "docs/devtrack/2026-05/PR-744-feat-web-add-back-to-top-button.md"
     },
     {
@@ -2969,7 +2969,7 @@
             "apps/web/messages/ta.json",
             "apps/web/messages/te.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-contact-add-i18n-translations-and-env-variabl.md",
         "docPath": "docs/devtrack/2026-05/PR-539-feat-contact-add-i18n-translations-and-env-variable-for-contact-email.md"
     },
     {
@@ -2988,7 +2988,7 @@
             "apps/web/src/utils/medicineParser.ts",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-scanner-add-ocr-fallback-for-uploaded-medicin.md",
         "docPath": "docs/devtrack/2026-05/PR-511-feat-scanner-add-ocr-fallback-for-uploaded-medicine-images.md"
     },
     {
@@ -3052,7 +3052,7 @@
             "apps/ml/run_pipeline.py",
             "apps/ml/scrapers/commercial_mrp.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-ml-build-commercial-mrp-scraper-using-openfda.md",
         "docPath": "docs/devtrack/2026-05/PR-500-feat-ml-build-commercial-mrp-scraper-using-openfda-api-and-nppa-reference-prices.md"
     },
     {
@@ -3085,7 +3085,7 @@
             "package-lock.json",
             "package.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-voice-improve-keyboard-accessibility-flow.md",
         "docPath": "docs/devtrack/2026-05/PR-498-feat-voice-improve-keyboard-accessibility-flow.md"
     },
     {
@@ -3115,7 +3115,7 @@
             "docs/SETUP_ML.md",
             "docs/api-reference.md"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-voice-stream-triage-transcription-over-websoc.md",
         "docPath": "docs/devtrack/2026-05/PR-490-feat-voice-stream-triage-transcription-over-websocket.md"
     },
     {
@@ -3138,7 +3138,7 @@
             "apps/web/messages/te.json",
             "apps/web/tests/voice-helpers.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-feat-voice-expand-bn-mr-te-voice-triage-with-grace.md",
         "docPath": "docs/devtrack/2026-05/PR-485-feat-voice-expand-bn-mr-te-voice-triage-with-graceful-fallback.md"
     },
     {
@@ -3157,7 +3157,7 @@
             "apps/web/app/[locale]/report/page.tsx",
             "apps/web/app/[locale]/scan/page.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-009-fix-bug-improve-mobile-responsiveness-across-pages.md",
         "docPath": "docs/devtrack/2026-05/PR-479-fix-bug-improve-mobile-responsiveness-across-pages-closes-355.md"
     },
     {
@@ -3177,7 +3177,7 @@
             "apps/web/tests/voice-accessibility.test.tsx",
             "apps/web/tests/voice-helpers.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-008-feat-voice-improve-accessibility-and-assistive-fee.md",
         "docPath": "docs/devtrack/2026-05/PR-469-feat-voice-improve-accessibility-and-assistive-feedback.md"
     },
     {
@@ -3229,7 +3229,7 @@
             "supabase/schema-target.json",
             "supabase/seed.sql"
         ],
-        "adr": null,
+        "adr": "adr/ADR-007-feat-data-add-medicine-pricing-for-compare-flow.md",
         "docPath": "docs/devtrack/2026-05/PR-401-feat-data-add-medicine-pricing-for-compare-flow.md"
     },
     {
@@ -3255,7 +3255,7 @@
             "apps/web/app/not-found.tsx",
             "apps/web/src/styles/print.css"
         ],
-        "adr": null,
+        "adr": "adr/ADR-006-refactor-web-centralize-layout-colors-into-theme-t.md",
         "docPath": "docs/devtrack/2026-05/PR-377-refactor-web-centralize-layout-colors-into-theme-tokens.md"
     },
     {
@@ -3272,7 +3272,7 @@
             "apps/api/src/routes/alerts.ts",
             "apps/api/tests/alertsPagination.test.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-005-test-alerts-add-pagination-integration-test-suite-.md",
         "docPath": "docs/devtrack/2026-05/PR-344-test-alerts-add-pagination-integration-test-suite-and-alerts-route.md"
     },
     {
@@ -3293,7 +3293,7 @@
             "apps/web/tests/pharmacy-map-layout.test.tsx",
             "apps/web/tests/pharmacy-panels.test.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-005-fix-map-resolve-pharmacy-map-control-overlap.md",
         "docPath": "docs/devtrack/2026-05/PR-342-fix-map-resolve-pharmacy-map-control-overlap.md"
     },
     {
@@ -3324,7 +3324,7 @@
             "apps/ml/services/telemetry.py",
             "apps/ml/tests/test_telemetry.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-004-codex-ml-telemetry-logging.md",
         "docPath": "docs/devtrack/2026-05/PR-312-codex-ml-telemetry-logging.md"
     },
     {
@@ -3346,7 +3346,7 @@
             "apps/ml/tests/fixtures/tamil_sample.wav",
             "apps/ml/tests/test_asr.py"
         ],
-        "adr": null,
+        "adr": "adr/ADR-003-feat-ml-add-asr-transcribe-endpoint-for-multilingu.md",
         "docPath": "docs/devtrack/2026-05/PR-233-feat-ml-add-asr-transcribe-endpoint-for-multilingual-speech-to-text.md"
     },
     {
@@ -3377,7 +3377,7 @@
             "apps/web/app/[locale]/page.tsx",
             "apps/web/app/layout.tsx"
         ],
-        "adr": null,
+        "adr": "adr/ADR-002-fix-resolve-navbar-routing-layout-crash-and-theme-.md",
         "docPath": "docs/devtrack/2026-05/PR-231-fix-resolve-navbar-routing-layout-crash-and-theme-false-positive.md"
     },
     {
@@ -3396,7 +3396,7 @@
             "apps/web/app/[locale]/scan/page.tsx",
             "package-lock.json"
         ],
-        "adr": null,
+        "adr": "adr/ADR-002-feat-ocr-bridge-next-js-scanner-ui-with-fastapi-ml.md",
         "docPath": "docs/devtrack/2026-05/PR-229-feat-ocr-bridge-next-js-scanner-ui-with-fastapi-ml-microservice-via-express-gateway.md"
     },
     {
@@ -3414,7 +3414,7 @@
             "apps/web/app/[locale]/map/page.tsx",
             "apps/web/lib/api.ts"
         ],
-        "adr": null,
+        "adr": "adr/ADR-001-feat-map-dual-layer-verified-pharmacy-map-integrat.md",
         "docPath": "docs/devtrack/2026-05/PR-223-feat-map-dual-layer-verified-pharmacy-map-integration.md"
     }
 ]
