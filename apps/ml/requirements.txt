@@ -1,3 +1,4 @@
+
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.9.0
@@ -9,6 +10,7 @@ python-multipart>=0.0.31
 # Scraping
 playwright>=1.49.0          # Headless browser - needed for JS-rendered sites like Jan Aushadhi
 beautifulsoup4>=4.12.0      # HTML parsing for static sites
+requests>=2.33.0            # HTTP requests
 requests>=2.34.2            # HTTP requests
 
 # Data processing
@@ -49,6 +51,10 @@ locust>=2.31.8
 
 # Agentic Orchestration and PDF rendering
 langgraph>=1.0.10
+# LangGraph Redis checkpointer (soft dependency — requires Redis Stack / Redis ≥ 8.0
+# with RedisJSON + RediSearch modules; plain Redis / Upstash free tier falls back to
+# the manual session-persistence path automatically at startup).
+langgraph-checkpoint-redis>=1.0.0
 pymupdf>=1.24.0
 cloudinary>=1.36.0
 

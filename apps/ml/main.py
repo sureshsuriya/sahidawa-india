@@ -5,6 +5,7 @@ import os
 import logging
 from contextlib import asynccontextmanager
 from utils.database import redis_client
+from services import triage_graph as _triage_graph_service
 
 from tracing import setup_tracing
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -28,9 +29,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup phase (App boots up)
     logger.info("SahiDawa ML Service starting up...")
+    # Attempt to initialise the LangGraph-native AsyncRedisSaver.  Falls back
+    # to manual JSON persistence silently if Redis Stack / Redis >= 8.0 is not
+    # available (e.g. Upstash free tier).  See services/triage_graph.py for
+    # the full fallback strategy and known tradeoffs.
+    await _triage_graph_service.init_checkpointer()
     yield
     # Shutdown phase (App stops/reloads)
-    logger.info("Closing Redis connection pool...")
+    logger.info("Closing connections...")
+    await _triage_graph_service.close_checkpointer()  # closes AsyncExitStack
     await redis_client.close()
 
 

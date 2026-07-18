@@ -12,29 +12,6 @@ interface GeohashCluster {
     type: "Jan Aushadhi" | "private" | "asha";
 }
 
-interface Pharmacy {
-    id: number;
-    name: string;
-    type: "Jan Aushadhi" | "private";
-    lat: number;
-    lng: number;
-    address: string;
-    district: string;
-    state: string;
-    verified: boolean;
-    distance_km: number;
-}
-
-interface AshaWorker {
-    id: number;
-    name: string;
-    district: string;
-    lat: number;
-    lng: number;
-    contact: string;
-    distance_km: number;
-}
-
 // Leaflet must be loaded client-side only in Next.js
 const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), {
     ssr: false,
@@ -44,13 +21,11 @@ const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ss
 const Popup = dynamic(() => import("react-leaflet").then((m) => m.Popup), { ssr: false });
 
 import "leaflet/dist/leaflet.css";
-import { CopyButton } from "@/components/ui/CopyButton";
+
 import { greenIcon, blueIcon, orangeIcon } from "./mapIcons";
 
 export default function MapView() {
     const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-    const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
-    const [ashaWorkers, setAshaWorkers] = useState<AshaWorker[]>([]);
     const [clusters, setClusters] = useState<GeohashCluster[]>([]);
     const [showPharmacies, setShowPharmacies] = useState(true);
     const [showAsha, setShowAsha] = useState(true);
@@ -58,7 +33,6 @@ export default function MapView() {
     const [error, setError] = useState<string | null>(null);
 
     const abortControllerRef = useRef<AbortController | null>(null);
-    const decodeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Function to load map data
     const loadForCoords = async (lat: number, lng: number) => {

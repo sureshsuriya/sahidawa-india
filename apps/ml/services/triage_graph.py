@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional, TypedDict
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from services.retrieval import retrieve_relevant_medicines
-from utils.database import redis_client
+from utils.database import redis_client, REDIS_URL
 
 load_dotenv()
 
@@ -93,6 +93,29 @@ try:
 except ImportError:
     LANGGRAPH_AVAILABLE = False
     logging.warning("LangGraph or LangChain components are missing. Triage workflow will run mocked or fail.")
+
+# ── Native LangGraph Redis Checkpointer (optional) ──────────────────────────
+# Requires langgraph-checkpoint-redis and Redis Stack / Redis >= 8.0
+# (RedisJSON + RediSearch modules).  On Upstash free tier or plain Redis < 8.0
+# the import succeeds but asetup() will raise, so startup silently stays in
+# manual mode — no code change needed by the operator.
+try:
+    from contextlib import AsyncExitStack
+    from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+    REDIS_CHECKPOINTER_AVAILABLE = True
+except ImportError:
+    REDIS_CHECKPOINTER_AVAILABLE = False
+    logging.warning(
+        "langgraph-checkpoint-redis not installed; triage sessions will use "
+        "manual JSON Redis persistence."
+    )
+
+# Module-level lifecycle state — mutated by init_checkpointer() at app startup.
+# _checkpointer_stack keeps the AsyncExitStack (and therefore the connection
+# pool) alive for the full lifetime of the app process.
+_checkpointer_stack: Optional[Any] = None   # AsyncExitStack instance
+_native_checkpointer: Optional[Any] = None  # live AsyncRedisSaver instance
+CHECKPOINTER_MODE: str = "manual"           # "native" | "manual"
 
 # ── Graph State Definition ───────────────────────────────────────────────────
 
@@ -460,9 +483,18 @@ def route_after_triage(state: TriageState) -> str:
 
 # ── Graph Compilation ─────────────────────────────────────────────────────────
 
-def build_triage_graph():
+def build_triage_graph(checkpointer=None):
+    """Build and compile the triage StateGraph.
+
+    Parameters
+    ----------
+    checkpointer:
+        An optional LangGraph checkpointer (e.g. ``AsyncRedisSaver``).
+        When ``None`` the graph is compiled without persistence, which is
+        correct for the manual-session-persistence path.
+    """
     workflow = StateGraph(TriageState)
-    
+
     # Add Nodes
     workflow.add_node("input_guardrail", input_guardrail_node)
     workflow.add_node("language_detector", language_detector_node)
@@ -470,39 +502,114 @@ def build_triage_graph():
     workflow.add_node("emergency_response", emergency_response_node)
     workflow.add_node("retrieval", retrieval_node)
     workflow.add_node("final_synthesis", final_synthesis_node)
-    
+
     # Define Flow
     workflow.set_entry_point("input_guardrail")
-    
+
     # Conditional Edges
     workflow.add_conditional_edges(
         "input_guardrail",
         route_after_guardrail,
         {
             "emergency_response": "emergency_response",
-            "language_detector": "language_detector"
-        }
+            "language_detector": "language_detector",
+        },
     )
-    
+
     workflow.add_edge("language_detector", "symptom_triage")
-    
+
     workflow.add_conditional_edges(
         "symptom_triage",
         route_after_triage,
         {
             END: END,
-            "final_synthesis": "retrieval"
-        }
+            "final_synthesis": "retrieval",
+        },
     )
-    
+
     workflow.add_edge("emergency_response", END)
     workflow.add_edge("retrieval", "final_synthesis")
     workflow.add_edge("final_synthesis", END)
-    
-    return workflow.compile()
 
-# Instantiated compiled graph
+    return workflow.compile(checkpointer=checkpointer)
+
+
+# ``triage_app`` is always compiled WITHOUT a checkpointer so it can be called
+# from the manual persistence path without a ``thread_id`` config.  LangGraph
+# requires a thread_id config whenever a checkpointer is present, so mixing
+# the two compiled graphs avoids that constraint in the fallback path.
 triage_app = build_triage_graph() if LANGGRAPH_AVAILABLE else None
+
+# Replaced by ``init_checkpointer()`` at startup when Redis Stack is available.
+_native_triage_app: Optional[Any] = None
+
+
+async def init_checkpointer() -> None:
+    """Attempt to initialise the LangGraph-native ``AsyncRedisSaver``.
+
+    An ``AsyncExitStack`` is used so the connection stays open for the full
+    lifetime of the app process — not torn down after a single ``async with``
+    block.  Call ``close_checkpointer()`` during application shutdown.
+
+    Falls back to manual mode silently on any failure (missing package,
+    Redis instance without RedisJSON/RediSearch, network error).
+
+    .. note::
+        On Upstash free tier or plain Redis < 8.0, ``asetup()`` will raise
+        because RedisJSON + RediSearch are unavailable.  ``CHECKPOINTER_MODE``
+        will stay ``"manual"`` and the existing JSON persistence path remains
+        fully active.  No operator action is required.
+    """
+    global _checkpointer_stack, _native_checkpointer, CHECKPOINTER_MODE, _native_triage_app
+
+    if not REDIS_CHECKPOINTER_AVAILABLE or not LANGGRAPH_AVAILABLE:
+        logging.info(
+            "Native LangGraph checkpointer prerequisites not met "
+            "(package missing or LangGraph unavailable); using manual Redis persistence."
+        )
+        return
+
+    stack = AsyncExitStack()
+    try:
+        saver = await stack.enter_async_context(
+            AsyncRedisSaver.from_conn_string(REDIS_URL)
+        )
+        await saver.asetup()  # creates RedisSearch indices if they don't exist
+
+        _checkpointer_stack = stack
+        _native_checkpointer = saver
+        CHECKPOINTER_MODE = "native"
+        _native_triage_app = build_triage_graph(checkpointer=saver)
+        logging.info("LangGraph AsyncRedisSaver initialised (native checkpoint mode active).")
+    except Exception:
+        logging.exception(
+            "AsyncRedisSaver init failed; falling back to manual Redis persistence. "
+            "Ensure your Redis instance supports RedisJSON + RediSearch "
+            "(Redis Stack or Redis >= 8.0)."
+        )
+        await stack.aclose()  # clean up any partial connection
+
+
+async def close_checkpointer() -> None:
+    """Close the ``AsyncRedisSaver`` connection pool on application shutdown."""
+    global _checkpointer_stack
+    if _checkpointer_stack is not None:
+        await _checkpointer_stack.aclose()
+        _checkpointer_stack = None
+        logging.info("LangGraph AsyncRedisSaver connection closed.")
+
+def _format_triage_result(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract the public-facing response fields from a completed triage state dict."""
+    return {
+        "response": state.get("response", ""),
+        "emergency": state.get("emergency_detected", False),
+        "language": state.get("language", "English"),
+        "summary": state.get("final_summary", ""),
+        "recommendations": state.get("recommendations", []),
+        "disclaimer": state.get("disclaimer", ""),
+        "details": state.get("collected_info", {}),
+    }
+
 
 async def run_triage_flow(
     messages: List[Dict[str, str]],
@@ -512,31 +619,40 @@ async def run_triage_flow(
     """
     Interface function to run the compiled LangGraph triage workflow.
 
-    If session_id is provided, previously persisted triage state (language,
-    collected symptom info, emergency flag, retrieved medicines) is loaded
-    from Redis and used as the starting point, so multi-turn conversations
-    don't lose context between requests. Missing or expired sessions simply
-    fall back to a fresh state instead of raising an error.
+    Persistence is handled in two complementary layers:
+
+    1. **Native mode** (``CHECKPOINTER_MODE == "native"``): the compiled graph
+       has an ``AsyncRedisSaver`` attached, so LangGraph manages checkpoint
+       state internally.  A ``thread_id`` config key is passed to ``ainvoke``
+       so the saver retrieves the correct checkpoint for this session.
+
+    2. **Shadow-write**: regardless of mode, a lightweight JSON snapshot of the
+       derived state (language, collected_info, etc.) is *always* written to
+       ``triage_session:<session_id>`` via ``_save_session_state``.  This
+       means the manual fallback always has a warm copy to resume from.
+
+       *Known tradeoff*: native checkpointer and manual JSON persistence use
+       different Redis key namespaces.  If native mode drops mid-conversation
+       (Redis blip), the fallback picks up from the shadow copy — effectively
+       the last successfully completed turn — rather than from the native
+       checkpoint.  The service stays available with at most one turn of
+       context loss in that rare scenario.  This is a documented decision.
+
+    3. **Manual path** (``CHECKPOINTER_MODE == "manual"`` or mid-run failover):
+       reads/writes via ``_load_session_state`` / ``_save_session_state``.
+       ``triage_app`` (compiled *without* a checkpointer) is used here so no
+       ``thread_id`` config is required.
     """
     if not LANGGRAPH_AVAILABLE or triage_app is None:
         logging.warning("LangGraph is unavailable. Returning mock triage response.")
-        # Fallback basic mock logic
         return {
             "response": "Hello, how can I help you? (Mock triage)",
             "emergency": False,
             "language": "English",
-            "details": {}
+            "details": {},
         }
 
-    persisted_state = None
-    if session_id:
-        try:
-            persisted_state = await _load_session_state(session_id)
-        except Exception:
-            logging.exception("Unexpected error loading session '%s'; starting fresh.", session_id)
-            persisted_state = None
-
-    initial_state = {
+    initial_state: Dict[str, Any] = {
         "messages": messages,
         "language": "English",
         "emergency_detected": False,
@@ -546,8 +662,51 @@ async def run_triage_flow(
         "final_summary": "",
         "recommendations": [],
         "disclaimer": "",
-        "response": ""
+        "response": "",
     }
+
+    # ── Native checkpointer path ──────────────────────────────────────────────
+    # _native_triage_app was compiled with the AsyncRedisSaver; it requires a
+    # thread_id config so LangGraph can read/write the correct checkpoint.
+    if CHECKPOINTER_MODE == "native" and session_id and _native_triage_app is not None:
+        config = {"configurable": {"thread_id": session_id}}
+        try:
+            final_state = await _native_triage_app.ainvoke(initial_state, config=config)
+            result = _format_triage_result(final_state)
+
+            # Shadow-write to the manual key namespace.  Cheap (just a Redis
+            # SET) and ensures the manual fallback path always has a warm copy
+            # in case native mode drops out mid-conversation.  See the docstring
+            # for the known namespace-split tradeoff.
+            try:
+                await _save_session_state(session_id, final_state)
+            except Exception:
+                logging.exception(
+                    "Shadow-write for session '%s' failed (non-fatal).", session_id
+                )
+
+            return result
+        except Exception:
+            logging.exception(
+                "Native checkpointer call failed mid-run for session '%s'; "
+                "falling through to manual Redis persistence.",
+                session_id,
+            )
+            # Fall through to the manual path below.
+
+    # ── Manual persistence path (startup fallback or mid-run failover) ────────
+    # Uses ``triage_app`` — always compiled WITHOUT a checkpointer — so it can
+    # be invoked without a thread_id config even when native mode was active at
+    # startup (a graph compiled with a checkpointer requires thread_id config).
+    persisted_state = None
+    if session_id:
+        try:
+            persisted_state = await _load_session_state(session_id)
+        except Exception:
+            logging.exception(
+                "Unexpected error loading session '%s'; starting fresh.", session_id
+            )
+            persisted_state = None
 
     if persisted_state:
         initial_state.update(persisted_state)
@@ -560,22 +719,16 @@ async def run_triage_flow(
             try:
                 await _save_session_state(session_id, final_state)
             except Exception:
-                logging.exception("Unexpected error saving session '%s'.", session_id)
+                logging.exception(
+                    "Unexpected error saving session '%s'.", session_id
+                )
 
-        return {
-            "response": final_state.get("response", ""),
-            "emergency": final_state.get("emergency_detected", False),
-            "language": final_state.get("language", "English"),
-            "summary": final_state.get("final_summary", ""),
-            "recommendations": final_state.get("recommendations", []),
-            "disclaimer": final_state.get("disclaimer", ""),
-            "details": final_state.get("collected_info", {})
-        }
+        return _format_triage_result(final_state)
     except Exception:
         logging.exception("Error executing triage graph flow.")
         return {
             "response": "An error occurred during symptom triage assessment. Please try again.",
             "emergency": False,
             "language": "English",
-            "details": {}
+            "details": {},
         }
