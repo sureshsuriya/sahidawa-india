@@ -83,9 +83,12 @@ for med in med_data:
         })
 
 dummy_alerts = [
-    {"brand": "Dolo 650", "mfg": "Micro Labs", "batch": "DL991"},
-    {"brand": "Azithral 500", "mfg": "Alembic", "batch": "AZ002"},
-    {"brand": "Telma 40", "mfg": "Glenmark", "batch": "TL77"}
+    {"brand": "Dolo 650", "mfg": "Micro Labs", "batch": "DL991", "type": "nsq"},
+    {"brand": "Azithral 500", "mfg": "Alembic", "batch": "AZ002", "type": "nsq"},
+    {"brand": "Telma 40", "mfg": "Glenmark", "batch": "TL77", "type": "nsq"},
+    {"brand": "Vicks Action 500", "mfg": "P&G", "batch": "VK123", "type": "banned"},
+    {"brand": "Corex Syrup", "mfg": "Pfizer", "batch": "CX456", "type": "banned"},
+    {"brand": "Shelcal 500 (Fake)", "mfg": "Unknown", "batch": "SH999", "type": "counterfeit"}
 ]
 
 for dummy in dummy_alerts:
@@ -94,7 +97,7 @@ for dummy in dummy_alerts:
         "reported_brand_name": dummy["brand"],
         "manufacturer": dummy["mfg"],
         "batch_number": dummy["batch"],
-        "alert_type": "nsq",
+        "alert_type": dummy["type"],
         "state": "Delhi",
         "district": "New Delhi",
         "reported_at": "2026-07-20T00:00:00Z"

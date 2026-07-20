@@ -154,8 +154,13 @@ def process_alert_pdf(pdf_url: str):
         logging.warning("No alerts extracted from the text by LangChain.")
         return
         
-    logging.info(f"Extracted {len(alerts)} alerts. Enqueuing to Redis database...")
-    enqueue_alerts(pdf_url, alerts)
+    logging.info(f"Extracted {len(alerts)} alerts. Skipping Redis and ingesting directly for local testing...")
+    # Bypassing Redis and deduplication for immediate local run
+    success = ingest_alerts(alerts)
+    if success:
+        logging.info("Successfully ingested extracted alerts directly to the database!")
+    else:
+        logging.error("Failed to ingest alerts directly.")
 
 def deduplicate_alerts_with_keys(pending_alerts_map: dict):
     """
@@ -217,12 +222,6 @@ if __name__ == "__main__":
         logging.error("API_SECRET_KEY is not set in environment. Exiting.")
         sys.exit(1)
     
-    try:
-        dlq_count = redis_client.hlen(DLQ_KEY)
-        if dlq_count > 0:
-            logging.warning(f"[DLQ] {dlq_count} alerts are currently in the dead-letter queue.")
-    except Exception as redis_err:
-        logging.error(f"Could not scan Redis DLQ on startup: {redis_err}")
-    logging.info("Starting up. Attempting to clear pending queue before scraping new PDFs...")
-    process_pending_queue()
+    # Bypassed Redis for local test
+    logging.info("Starting up. Fetching PDFs directly...")
     scrape_cdsco_alerts()
