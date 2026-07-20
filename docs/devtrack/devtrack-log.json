@@ -1,5 +1,24 @@
 [
   {
+    "prNumber": 3761,
+    "title": "refactor(api): extract business logic into services and repositories",
+    "author": "Avinash-sdbegin",
+    "mergedAt": "2026-07-20",
+    "area": "Backend",
+    "score": 52,
+    "docPath": "docs/devtrack/2026-07/PR-3761-refactor-api-extract-business-logic-into-services-.md",
+    "linkedIssue": "#3681",
+    "labels": "level:advanced,quality:exceptional,gssoc:approved,type:refactor",
+    "filesChanged": [
+      "apps/api/src/repositories/pharmacy.repository.ts",
+      "apps/api/src/repositories/redis.repository.ts",
+      "apps/api/src/repositories/scan.repository.ts",
+      "apps/api/src/routes/pharmacies.ts",
+      "apps/api/src/routes/scan.ts",
+      "apps/api/src/services/pharmacy.service.ts",
+      "apps/api/src/services/scan.service.ts"
+    ],
+    "adr": "docs/devtrack/adr/ADR-058-refactor-api-extract-business-logic-into-services-.md"
     "prNumber": 3769,
     "title": "feat(web): serve stale cached GET responses during CSRF refresh",
     "author": "Avinash-sdbegin",
