@@ -103,7 +103,7 @@ SahiDawa operates as a flagship counterfeit intelligence network, prioritizing s
 
 ## 🏗️ Architecture
 
-Refer to the [Architecture Decision Records (ADRs)](./docs/adr/) for detailed technical design documentation and choices.
+Major architectural decisions (Turborepo, Supabase, Redis, LangGraph, Next.js, and more) are documented as **Architecture Decision Records (ADRs)**. Start with the [ADR index](./docs/adr/README.md) and the foundational [ADR 0006 — Record Architecture Decisions](./docs/adr/0006-record-architecture-decisions.md) for the "why" behind our tech stack.
 
 ```mermaid
 flowchart TD
