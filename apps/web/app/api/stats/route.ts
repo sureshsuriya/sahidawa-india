@@ -10,19 +10,19 @@ export async function GET() {
                 supabase
                     .from("drug_alerts")
                     .select("*", { count: "exact", head: true })
-                    .eq("alert_type", "banned"),
+                    .eq("alert_type", "Banned"),
                 supabase
                     .from("drug_alerts")
                     .select("*", { count: "exact", head: true })
-                    .eq("alert_type", "recalled"),
+                    .eq("alert_type", "Recalled"),
                 supabase
                     .from("drug_alerts")
                     .select("*", { count: "exact", head: true })
-                    .eq("alert_type", "counterfeit"),
+                    .eq("alert_type", "Spurious"),
                 supabase
                     .from("drug_alerts")
                     .select("*", { count: "exact", head: true })
-                    .eq("alert_type", "nsq"),
+                    .eq("alert_type", "NSQ"),
                 supabase.from("scan_history").select("*", { count: "exact", head: true }),
                 supabase
                     .from("pharmacies")

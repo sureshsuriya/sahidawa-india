@@ -125,16 +125,22 @@ export default function SahiDawaHome() {
             if (homepageAlerts.length > 0) return; // Prevent double fetching
 
             const { data } = await supabase
-                .from("medicines")
+                .from("drug_alerts")
                 .select("*")
-                .or(
-                    "is_counterfeit_alert.eq.true,cdsco_approval_status.eq.recalled,cdsco_approval_status.eq.spurious"
-                )
                 .order("created_at", { ascending: false })
                 .limit(4);
 
             if (data) {
-                setHomepageAlerts(data);
+                // Map drug_alerts format to match expected properties
+                const mappedData = data.map((alert) => ({
+                    ...alert,
+                    brand_name: alert.reported_brand_name || "Unknown Brand",
+                    composition: alert.manufacturer || "Unknown Manufacturer",
+                    cdsco_approval_status: alert.alert_type === "banned" ? "banned" : "recalled",
+                    is_counterfeit_alert:
+                        alert.alert_type === "Spurious" || alert.alert_type === "counterfeit",
+                }));
+                setHomepageAlerts(mappedData);
             }
         } catch (error) {
             console.error("Prefetch error:", error);
